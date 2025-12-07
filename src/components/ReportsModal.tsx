@@ -1,49 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import { X, FileText, Calendar, TrendingUp, AlertTriangle, Clock, Printer, Download, BarChart3, Activity, Wifi, Building2, Users, Shield, Settings, Mail, FileSpreadsheet, Presentation, Bell } from 'lucide-react';
-import axios from 'axios';
 
 interface ReportsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  departments: any[];
 }
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly';
 type ReportType = 'overview' | 'trends' | 'weekdays' | 'timeperiods' | 'departments' | 'medical' | 'kpis' | 'compliance' | 'technical' | 'maintenance' | 'executive' | 'standards' | 'custom';
 
-const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
+const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, departments }) => {
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('daily');
   const [reportType, setReportType] = useState<ReportType>('overview');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [reportData, setReportData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [departments, setDepartments] = useState<any[]>([]);
 
   useEffect(() => {
-    if (isOpen) {
-      fetchReportData();
+    if (!isOpen) {
+      return;
     }
-  }, [isOpen, reportPeriod, selectedDate, reportType]);
 
-  const fetchReportData = async () => {
-    setLoading(true);
-    try {
-      const config = {
-        method: 'get',
-        maxBodyLength: Infinity,
-        url: 'https://sound-level-django-xkm4b.ondigitalocean.app/soundlevel/dashboard/',
-        headers: {},
-      };
-
-      const response = await axios.request(config);
-      setDepartments(response.data);
-      
-      processReportData(response.data);
-    } catch (error) {
-      console.error('Error fetching report data:', error);
-    } finally {
+    if (!departments?.length) {
+      setReportData(null);
       setLoading(false);
+      return;
     }
-  };
+
+    setLoading(true);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
+      processReportData(departments);
+      setLoading(false);
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isOpen, departments, reportPeriod, selectedDate, reportType]);
 
   const processReportData = (data: any[]) => {
     const report = {

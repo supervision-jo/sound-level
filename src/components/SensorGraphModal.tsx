@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { X, BarChart3, Calendar, TrendingUp, Download, Activity } from 'lucide-react';
-import axios from 'axios';
 
 interface SensorGraphModalProps {
   isOpen: boolean;
@@ -18,48 +17,41 @@ const SensorGraphModal: React.FC<SensorGraphModalProps> = ({ isOpen, onClose, de
   const [loading, setLoading] = useState(false);
   const [statistics, setStatistics] = useState<any>(null);
 
-  useEffect(() => {
-    if (selectedSensor && selectedDepartment) {
-      fetchSensorData();
-    }
-  }, [selectedSensor, selectedDepartment, timePeriod]);
-
-  const fetchSensorData = async () => {
-    if (!selectedSensor?.id) return;
-    
-    setLoading(true);
-    try {
-      const timeMapping = {
-        'hour': '3600',
-        '6hour': '21600', 
-        'day': '86400',
-        'week': '604800',
-        'month': '2592000'
-      };
-
-      const config = {
-        method: 'get',
-        maxBodyLength: Infinity,
-        url: `https://sound-level-dashboard.vision-jo.com/soundlevel/dashboard/sensor/${selectedSensor.id}?time=${timeMapping[timePeriod]}`,
-        headers: {},
-      };
-
-      const response = await axios.request(config);
-      if (response.data && response.data.length > 0 && response.data[0].sensors && response.data[0].sensors.length > 0) {
-        const sensorData = response.data[0].sensors[0];
-        setGraphData(sensorData.records || []);
-        calculateStatistics(sensorData.records || []);
-      }
-    } catch (error) {
-      console.error('Error fetching sensor data:', error);
-      // Use mock data as fallback
-      const mockData = generateMockData();
-      setGraphData(mockData);
-      calculateStatistics(mockData);
-    } finally {
-      setLoading(false);
-    }
+  const timeMapping: Record<TimePeriod, number> = {
+    hour: 3600,
+    '6hour': 21600,
+    day: 86400,
+    week: 604800,
+    month: 2592000,
   };
+
+  useEffect(() => {
+    if (!selectedSensor) {
+      setGraphData([]);
+      setStatistics(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const cutoff = Date.now() - timeMapping[timePeriod] * 1000;
+
+    const filteredRecords = (selectedSensor.records || []).filter((record: any) => {
+      if (!record?.date_time) {
+        return true;
+      }
+      const recordTime = new Date(record.date_time).getTime();
+      if (Number.isNaN(recordTime)) {
+        return true;
+      }
+      return recordTime >= cutoff;
+    });
+
+    const nextData = filteredRecords.length ? filteredRecords : generateMockData();
+    setGraphData(nextData);
+    calculateStatistics(nextData);
+    setLoading(false);
+  }, [selectedSensor, timePeriod]);
 
   const generateMockData = () => {
     const now = new Date();

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { X, Map, TrendingUp, Calendar, Filter, Download } from 'lucide-react';
-import axios from 'axios';
 
 interface HeatmapModalProps {
   isOpen: boolean;

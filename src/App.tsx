@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -10,12 +10,15 @@ import {
   WifiOff,
 } from "lucide-react";
 import LoginForm from "./pages/Login";
-import axios from "axios";
 import SensorModal from "./components/SensorModal";
 import ReportsModal from "./components/ReportsModal";
 import HeatmapModal from "./components/HeatmapModal";
 import SensorGraphModal from "./components/SensorGraphModal";
 import AlertConfigModal from "./components/AlertConfigModal";
+
+const SENSOR_DATA_WS_URL = "wss://sound-level.vision-jo.com/ws/sensor-data/";
+const WS_RECONNECT_DELAY = 5000;
+const WS_HEARTBEAT_INTERVAL = 30000;
 
 interface User {
   username: string;
@@ -30,8 +33,7 @@ function App() {
   const [loginError, setLoginError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const [departments, setDepartments] = useState([]);
-  const [statistics, setStatistics] = useState<any>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
 
   const [currentTime, _] = useState(new Date());
   const [timeFrame, setTimeFrame] = useState<"10m" | "1h" | "6h" | "1d">("1h");
@@ -89,55 +91,92 @@ function App() {
   // }, []);
 
   useEffect(() => {
-    const fetchData = () => {
-      const config = {
-        method: "get",
-        maxBodyLength: Infinity,
-        url: "https://sound-level-django-xkm4b.ondigitalocean.app/soundlevel/dashboard/",
-        headers: {},
-      };
+    if (!isAuthenticated) {
+      return;
+    }
 
-      axios
-        .request(config)
-        .then((response) => {
-          console.log("Fetched data:", response.data);
-          setDepartments(response.data);
-        })
-        .catch((error) => {
-          console.error("Error fetching data:", error);
-        });
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+    let shouldReconnect = true;
+
+    const handlePayload = (payload: any) => {
+      if (!payload || payload.type === "pong") {
+        return;
+      }
+
+      const departmentsPayload = Array.isArray(payload)
+        ? payload
+        : payload.departments ?? payload.data;
+
+      if (Array.isArray(departmentsPayload)) {
+        setDepartments(departmentsPayload);
+      }
     };
 
-    fetchData();
-
-    const fetchDataStatistics = () => {
-      const config = {
-        method: "get",
-        maxBodyLength: Infinity,
-        url: "https://sound-level-django-xkm4b.ondigitalocean.app/soundlevel/dashboard_statistics/",
-        headers: {},
-      };
-
-      axios
-        .request(config)
-        .then((response) => {
-          console.log("Fetched data:", response.data);
-          setStatistics(response.data);
-        })
-        .catch((error) => {
-          console.error("Error fetching data:", error);
-        });
+    const clearHeartbeat = () => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
     };
 
-    fetchDataStatistics();
+    const startHeartbeat = () => {
+      clearHeartbeat();
+      heartbeatTimer = setInterval(() => {
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "ping" }));
+        }
+      }, WS_HEARTBEAT_INTERVAL);
+    };
 
-    const interval = setInterval(() => {
-      fetchData();
-      fetchDataStatistics();
-    }, 5000);
+    const connect = () => {
+      ws = new WebSocket(SENSOR_DATA_WS_URL);
 
-    return () => clearInterval(interval);
-  }, []);
+      ws.onopen = () => {
+        console.info("Sensor websocket connected");
+        startHeartbeat();
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          console.log("WebSocket payload received:", payload);
+          handlePayload(payload);
+        } catch (error) {
+          console.error("Failed to parse websocket payload", error);
+        }
+      };
+
+      ws.onerror = (event) => {
+        console.error("Sensor websocket error", event);
+      };
+
+      ws.onclose = (event) => {
+        console.warn("Sensor websocket closed", event.reason || event.code);
+        clearHeartbeat();
+
+        if (shouldReconnect) {
+          reconnectTimer = setTimeout(connect, WS_RECONNECT_DELAY);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      shouldReconnect = false;
+
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+
+      clearHeartbeat();
+      ws?.close();
+      ws = null;
+    };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (departments?.length) {
@@ -232,29 +271,21 @@ function App() {
     setIsAlertConfigModalOpen(false);
   };
 
-  // Show login form if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <LoginForm
-        onLogin={handleLogin}
-        error={loginError}
-        isLoading={isLoading}
-      />
-    );
-  }
+  const getSensorStatusIcon = (sensor: any) => {
+    const status = getWifiSignalStatus(sensor);
 
-  const getSensorStatusIcon = (signal?: number) => {
-    if (signal === undefined || signal === null) {
+    if (status === "offline") {
       return <WifiOff className="h-3 w-3 text-gray-500" />;
     }
 
-    if (signal < 20) {
-      return <Wifi className="h-3 w-3 text-red-500" />;
-    } else if (signal < 40) {
-      return <Wifi className="h-3 w-3 text-yellow-500" />;
-    } else {
-      return <Wifi className="h-3 w-3 text-green-500" />;
-    }
+    const colorClass =
+      status === "green"
+        ? "text-green-500"
+        : status === "yellow"
+        ? "text-yellow-500"
+        : "text-red-500";
+
+    return <Wifi className={`h-3 w-3 ${colorClass}`} />;
   };
 
   // const getTimeFrameData = (dept: Department) => {
@@ -307,24 +338,201 @@ function App() {
   //   0
   // );
 
-  const MiniChart = ({ data, color }: { data: number[]; color: string }) => {
-    // Cap values at 200 and set fixed range from 35 to 200
-    const cappedData = data.map(value => Math.min(value, 200));
-    const minRange = 35;
-    const maxRange = 200;
-    const range = maxRange - minRange;
+  const parseAverageValue = (value: unknown) => {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : 0;
+    }
+    const parsed = parseFloat(value as string);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
 
-    console.log("datasss", data);
+  const getSensorValues = (sensor: any) => {
+    if (!sensor) {
+      return [];
+    }
+
+    const recordValues =
+      sensor.records?.map((record: any) =>
+        parseAverageValue(record?.avg ?? record?.level)
+      ) ?? [];
+
+    const validValues = recordValues.filter(
+      (value: number) => Number.isFinite(value) && value > 0
+    );
+
+    if (validValues.length) {
+      return validValues;
+    }
+
+    const fallback = parseAverageValue(sensor?.avg);
+    return Number.isFinite(fallback) && fallback > 0 ? [fallback] : [];
+  };
+
+  const getSensorAverage = (sensor: any) => {
+    const values = getSensorValues(sensor);
+    if (!values.length) {
+      return 0;
+    }
+    const sum = values.reduce((acc: number, value: number) => acc + value, 0);
+    return sum / values.length;
+  };
+
+  const getLatestWifiSignal = (sensor: any) => {
+    if (!sensor) {
+      return null;
+    }
+
+    const latestRecordSignal = sensor.records?.at?.(-1)?.wifi_signal;
+    if (typeof latestRecordSignal === "number") {
+      return latestRecordSignal;
+    }
+
+    if (typeof sensor?.wifi_signal === "number") {
+      return sensor.wifi_signal;
+    }
+
+    return null;
+  };
+
+  // Wi-Fi RSSI thresholds (dBm) derived from common signal-strength guidelines
+  const getWifiSignalStatus = (sensor: any) => {
+    if (!sensor?.is_active) {
+      return "offline";
+    }
+
+    const signal = getLatestWifiSignal(sensor);
+    if (typeof signal !== "number") {
+      return "offline";
+    }
+
+    if (signal >= -60) {
+      return "green";
+    }
+
+    if (signal >= -75) {
+      return "yellow";
+    }
+
+    if (signal >= -85) {
+      return "red";
+    }
+
+    return "offline";
+  };
+
+  const getDepartmentAverage = (dept: any) => {
+    const sensors = Array.isArray(dept?.sensors) ? dept.sensors : [];
+    if (!sensors.length) {
+      return 0;
+    }
+
+    let total = 0;
+    let count = 0;
+
+    sensors.forEach((sensor: any) => {
+      const values = getSensorValues(sensor);
+      values.forEach((value: any) => {
+        total += value;
+        count += 1;
+      });
+    });
+
+    if (!count) {
+      return Number.isFinite(dept?.avg) ? dept.avg : 0;
+    }
+
+    return total / count;
+  };
+
+  const dashboardStats = useMemo(() => {
+    const summary = {
+      totalDepartments: departments.length,
+      totalSensors: 0,
+      criticalSensors: 0,
+      offlineSensors: 0,
+      averageNoise: 0,
+    };
+
+    if (!departments.length) {
+      return summary;
+    }
+
+    let noiseSum = 0;
+    let noiseSamples = 0;
+
+    departments.forEach((dept: any) => {
+      const sensors = Array.isArray(dept?.sensors) ? dept.sensors : [];
+      summary.totalSensors += sensors.length;
+
+      sensors.forEach((sensor: any) => {
+        const wifiStatus = getWifiSignalStatus(sensor);
+        if (wifiStatus === "red") {
+          summary.criticalSensors += 1;
+        }
+
+        if (wifiStatus === "offline") {
+          summary.offlineSensors += 1;
+        }
+
+        const sensorAvg = getSensorAverage(sensor);
+        if (sensorAvg > 0) {
+          noiseSum += sensorAvg;
+          noiseSamples += 1;
+        }
+      });
+    });
+
+    summary.averageNoise =
+      noiseSamples > 0 ? Math.round((noiseSum / noiseSamples) * 100) / 100 : 0;
+
+    return summary;
+  }, [departments]);
+
+  // Show login form if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <LoginForm
+        onLogin={handleLogin}
+        error={loginError}
+        isLoading={isLoading}
+      />
+    );
+  }
+
+  const normalizeChartValues = (values?: Array<number | string>) => {
+    if (!values || !values.length) {
+      return [];
+    }
+
+    return values.map((value) => {
+      const parsed = parseAverageValue(value);
+      return Math.max(parsed, 0);
+    });
+  };
+
+  const MiniChart = ({ data, color }: { data: number[]; color: string }) => {
+    const normalizedValues = normalizeChartValues(data);
+    const cappedData = normalizedValues.map((value) => Math.min(value, 200));
+
+    if (!cappedData.length) {
+      return <div className="h-8 sm:h-10 flex items-end" />;
+    }
+
+    const minValue = Math.min(...cappedData);
+    const maxValue = Math.max(...cappedData);
+    const paddedMin = Math.max(Math.min(minValue, 35), 0);
+    const paddedMax = Math.max(maxValue, paddedMin + 10);
+    const range = paddedMax - paddedMin;
 
     return (
-      <div className="flex items-end h-6 sm:h-8 gap-0.5 sm:gap-1">
-        {cappedData?.map((value, index) => (
+      <div className="flex items-end h-8 sm:h-12 gap-0.5 sm:gap-1">
+        {cappedData.map((value, index) => (
           <div
             key={index}
             className={`w-1.5 sm:w-2 ${color} rounded-t-sm transition-all duration-300`}
             style={{
-              height: `${Math.max(((value - minRange) / range) * 100, 5)}%`,
-              minHeight: "3px",
+              height: `${Math.max(((value - paddedMin) / range) * 100, 8)}%`,
+              minHeight: "6px",
             }}
           />
         ))}
@@ -335,17 +543,7 @@ function App() {
   console.log(departments, "departments");
 
   const getSensoresStatus = (sensor: any) => {
-    console.log("sensor-------", sensor);
-
-    if (!sensor.records || sensor.records.length === 0) return 0;
-
-    const total = sensor.records.reduce((sum: any, record: any) => {
-      return sum + parseFloat(record.avg);
-    }, 0);
-
-    const average = total / sensor.records.length;
-    console.log("getSensoresAvg", average);
-    return average;
+    return getSensorAverage(sensor);
   };
 
   // const getNoiseLevel = (house: any, red: any, yellow: any) => {
@@ -408,24 +606,15 @@ function App() {
   //   };
   // };
 
-  const getSensorAvgValues = (house: any, sensorId: any) => {
-    const sensor = house.sensors.find((s: any) => s.id === sensorId);
-
-    if (!sensor || !sensor.records || sensor.records.length === 0) {
-      return []; // مفيش بيانات نرجع array فاضية
-    }
-
-    return sensor.records.map((record: any) => parseFloat(record.avg));
+  const getSensorAvgValues = (sensor: any) => {
+    return getSensorValues(sensor);
   };
 
-  const getAllSensorsAvgValues = (house: any) => {
-    return house.sensors.map((sensor: any) => {
-      const values = sensor.records.map((record: any) =>
-        parseFloat(record.avg)
-      );
-      const sum = values.reduce((acc: any, val: any) => acc + val, 0);
-      const avg = values.length > 0 ? sum / values.length : 0;
-      return Math.round(avg * 100) / 100; // تقريبه إلى رقم عشريين
+  const getAllSensorsAvgValues = (dept: any) => {
+    const sensors = Array.isArray(dept?.sensors) ? dept.sensors : [];
+    return sensors.map((sensor: any) => {
+      const avg = getSensorAverage(sensor);
+      return Math.round(avg * 100) / 100;
     });
   };
 
@@ -555,99 +744,130 @@ function App() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {/* Stats Overview */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 mb-6 sm:mb-8">
-          <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-600">
-                  Total Departments
-                </p>
-                <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-0.5 sm:mt-1">
-                  {statistics?.statistics?.total_departments}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 hidden sm:block">
-                  إجمالي الأقسام
-                </p>
+        <div className="flex flex-col xl:flex-row gap-6 sm:gap-8 mb-6 sm:mb-8">
+          <div className="flex-1">
+            <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-6">
+              <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      Total Departments
+                    </p>
+                    <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-0.5 sm:mt-1">
+                      {dashboardStats.totalDepartments}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 hidden sm:block">
+                      إجمالي الأقسام
+                    </p>
+                  </div>
+                  <div className="p-2 sm:p-3 bg-blue-100 rounded-lg">
+                    <Building2 className="h-4 w-4 sm:h-6 sm:w-6 text-blue-600" />
+                  </div>
+                </div>
               </div>
-              <div className="p-2 sm:p-3 bg-blue-100 rounded-lg">
-                <Building2 className="h-4 w-4 sm:h-6 sm:w-6 text-blue-600" />
+
+              <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      Total Sensors
+                    </p>
+                    <p className="text-lg sm:text-2xl font-bold text-blue-600 mt-0.5 sm:mt-1">
+                      {dashboardStats.totalSensors}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 hidden sm:block">
+                      إجمالي أجهزة الاستشعار
+                    </p>
+                  </div>
+                  <div className="p-2 sm:p-3 bg-blue-100 rounded-lg">
+                    <Activity className="h-4 w-4 sm:h-6 sm:w-6 text-blue-600" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      Critical Alerts
+                    </p>
+                    <p className="text-lg sm:text-2xl font-bold text-red-600 mt-0.5 sm:mt-1">
+                      {dashboardStats.criticalSensors}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 hidden sm:block">
+                      تنبيهات حرجة
+                    </p>
+                  </div>
+                  <div className="p-2 sm:p-3 bg-red-100 rounded-lg">
+                    <AlertTriangle className="h-4 w-4 sm:h-6 sm:w-6 text-red-600" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      Offline Sensors
+                    </p>
+                    <p className="text-lg sm:text-2xl font-bold text-gray-600 mt-0.5 sm:mt-1">
+                      {dashboardStats.offlineSensors}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 hidden sm:block">
+                      أجهزة غير متصلة
+                    </p>
+                  </div>
+                  <div className="p-2 sm:p-3 bg-gray-100 rounded-lg">
+                    <WifiOff className="h-4 w-4 sm:h-6 sm:w-6 text-gray-600" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      Average Noise
+                    </p>
+                    <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-0.5 sm:mt-1">
+                      {dashboardStats.averageNoise} dB
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 hidden sm:block">
+                      متوسط الضوضاء
+                    </p>
+                  </div>
+                  <div className="p-2 sm:p-3 bg-gray-100 rounded-lg">
+                    <Volume2 className="h-4 w-4 sm:h-6 sm:w-6 text-gray-600" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-600">
-                  Total Sensors
-                </p>
-                <p className="text-lg sm:text-2xl font-bold text-blue-600 mt-0.5 sm:mt-1">
-                  {statistics?.statistics?.total_sensors}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 hidden sm:block">
-                  إجمالي أجهزة الاستشعار
-                </p>
-              </div>
-              <div className="p-2 sm:p-3 bg-blue-100 rounded-lg">
-                <Activity className="h-4 w-4 sm:h-6 sm:w-6 text-blue-600" />
-              </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800">
+                Quick Actions
+              </h2>
+              <p className="text-xs text-gray-500">
+                Run common workflows in one click
+              </p>
             </div>
-          </div>
-
-          <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-600">
-                  Critical Alerts
-                </p>
-                <p className="text-lg sm:text-2xl font-bold text-red-600 mt-0.5 sm:mt-1">
-                  {statistics?.statistics?.red_sensors}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 hidden sm:block">
-                  تنبيهات حرجة
-                </p>
-              </div>
-              <div className="p-2 sm:p-3 bg-red-100 rounded-lg">
-                <AlertTriangle className="h-4 w-4 sm:h-6 sm:w-6 text-red-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-600">
-                  Offline Sensors
-                </p>
-                <p className="text-lg sm:text-2xl font-bold text-gray-600 mt-0.5 sm:mt-1">
-                  {statistics?.statistics?.inactive_sensors}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 hidden sm:block">
-                  أجهزة غير متصلة
-                </p>
-              </div>
-              <div className="p-2 sm:p-3 bg-gray-100 rounded-lg">
-                <WifiOff className="h-4 w-4 sm:h-6 sm:w-6 text-gray-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-600">
-                  Average Noise
-                </p>
-                <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-0.5 sm:mt-1">
-                  {statistics?.statistics?.sensors_avg} LV
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 hidden sm:block">
-                  متوسط الضوضاء
-                </p>
-              </div>
-              <div className="p-2 sm:p-3 bg-gray-100 rounded-lg">
-                <Volume2 className="h-4 w-4 sm:h-6 sm:w-6 text-gray-600" />
-              </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={openReportsModal}
+                className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                Generate Report
+              </button>
+              <button
+                onClick={openReportsModal}
+                className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                Settings
+              </button>
             </div>
           </div>
         </div>
@@ -698,7 +918,7 @@ function App() {
           </div>
         </div> */}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           {/* Department Monitoring */}
           <div className="lg:col-span-2 order-2 lg:order-1">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
@@ -733,127 +953,161 @@ function App() {
                 </div>
               </div>
 
-              <div className="space-y-3 sm:space-y-4">
-                {departments?.map((dept: any) => (
-                  <div
-                    key={dept.id}
-                    className={`rounded-lg border-2 transition-all duration-300 ${getStatusColor(
-                      dept.color
-                    )}`}
-                  >
-                    {/* Department Header */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+                {departments?.map((dept: any) => {
+                  const deptAverage = getDepartmentAverage(dept);
+                  const rawThreshold = Number(dept?.red);
+                  const maxRange =
+                    Number.isFinite(rawThreshold) && rawThreshold > 0
+                      ? rawThreshold * 1.5
+                      : 120;
+                  const progressRatio =
+                    maxRange > 0 ? (deptAverage / maxRange) * 100 : 0;
+                  const clampedRatio = Math.min(
+                    Math.max(progressRatio, 0),
+                    100
+                  );
+
+                  return (
                     <div
-                      className="p-3 sm:p-4 cursor-pointer"
-                      onClick={() => toggleDepartment(dept.id)}
+                      key={dept.id}
+                      className={`h-full flex flex-col rounded-lg border-2 transition-all duration-300 ${getStatusColor(
+                        dept.color
+                      )}`}
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 sm:mb-3 gap-2 sm:gap-0">
-                        <div className="flex items-center gap-2 sm:gap-3">
-                          <div className="flex flex-col">
-                            <h3 className="font-semibold text-sm sm:text-base text-gray-800 flex items-center gap-2">
+                      {/* Department Header */}
+                      <div
+                        className="p-3 sm:p-4 cursor-pointer"
+                        onClick={() => toggleDepartment(dept.id)}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 sm:mb-3 gap-2 sm:gap-0">
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            <div className="flex flex-col">
+                              <h3 className="font-semibold text-sm sm:text-base text-gray-800 flex items-center gap-2">
+                                {dept.name}
+                                {expandedDepartments.has(dept.id) ? (
+                                  <ChevronUp className="h-4 w-4 text-gray-500" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4 text-gray-500" />
+                                )}
+                              </h3>
+                              {/* <p className="text-xs sm:text-sm text-gray-600">
                               {dept.name}
-                              {expandedDepartments.has(dept.id) ? (
-                                <ChevronUp className="h-4 w-4 text-gray-500" />
-                              ) : (
-                                <ChevronDown className="h-4 w-4 text-gray-500" />
-                              )}
-                            </h3>
-                            <p className="text-xs sm:text-sm text-gray-600">
-                              {dept.name_en}
-                            </p>
+                            </p> */}
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
+                            <div className="text-left sm:text-right">
+                              <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                                {Math.round(deptAverage)} dB
+                              </div>
+                            </div>
+                            <div className="w-16 sm:w-24">
+                              <MiniChart
+                                data={getAllSensorsAvgValues(dept)}
+                                color={getProgressColor(dept.color)}
+                              />
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
-                          <div className="text-left sm:text-right">
-                            <div className="text-lg sm:text-2xl font-bold text-gray-900">
-                              {Math.round(dept.avg)} LV
-                            </div>
-                            {/* <div className="text-xs text-gray-500">
-                              Limit: {dept.threshold} dB
-                            </div> */}
+
+                        <div className="mt-2 sm:mt-3">
+                          <div className="flex justify-between text-xs sm:text-sm text-gray-600 mb-1">
+                            <span>Noise Level</span>
+                            <span>{Math.round(clampedRatio)}%</span>
                           </div>
-                          <div className="w-16 sm:w-24">
-                            <MiniChart
-                              data={getAllSensorsAvgValues(dept)}
-                              color={getProgressColor(dept.color)}
+                          <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
+                            <div
+                              className={`h-1.5 sm:h-2 rounded-full transition-all duration-500 ${getProgressColor(
+                                dept.color
+                              )}`}
+                              style={{
+                                width: `${clampedRatio}%`,
+                              }}
                             />
                           </div>
                         </div>
                       </div>
 
-                      <div className="mt-2 sm:mt-3">
-                        <div className="flex justify-between text-xs sm:text-sm text-gray-600 mb-1">
-                          <span>Noise Level</span>
-                          <span>
-                            {Math.round((dept?.avg / (dept.red * 1.5)) * 100)}%
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
-                          <div
-                            className={`h-1.5 sm:h-2 rounded-full transition-all duration-500 ${getProgressColor(
-                              dept.color
-                            )}`}
-                            style={{
-                              width: `${Math.min(
-                                (dept?.avg / (dept.red * 1.5)) * 100,
-                                100
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Expanded Sensor Details */}
-                    {expandedDepartments.has(dept.id) && (
-                      <div className="border-t border-gray-200 bg-gray-50/50 p-3 sm:p-4">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                          <Activity className="h-4 w-4" />
-                          Individual Sensors ({dept.sensors.length})
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {dept.sensors.map((sensor: any) => (
-                            <div
-                              key={sensor.id}
-                              onClick={() => handleSensorClick(sensor, dept)}
-                              className={`p-3 rounded-lg border ${getStatusColor(
-                                sensor.is_active ? sensor.color : "offline"
-                              )} cursor-pointer hover:shadow-md transition-all duration-200`}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <h5 className="text-sm font-medium text-gray-800">
-                                      {sensor.name}
-                                    </h5>
-                                    {getSensorStatusIcon(
-                                      sensor.records.at(-1)?.wifi_signal
-                                    )}
+                      {/* Expanded Sensor Details */}
+                      {expandedDepartments.has(dept.id) && (
+                        <div className="border-t border-gray-200 bg-gray-50/50 p-3 sm:p-4">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                            <Activity className="h-4 w-4" />
+                            Individual Sensors ({dept.sensors.length})
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {dept.sensors.map((sensor: any) => {
+                              const wifiStatus = getWifiSignalStatus(sensor);
+                              return (
+                                <div
+                                  key={sensor.id}
+                                  onClick={() =>
+                                    handleSensorClick(sensor, dept)
+                                  }
+                                  className={`p-3 rounded-lg border ${getStatusColor(
+                                    wifiStatus
+                                  )} cursor-pointer hover:shadow-md transition-all duration-200`}
+                                >
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <h5 className="text-sm font-medium text-gray-800">
+                                          {sensor.name}
+                                        </h5>
+                                        {getSensorStatusIcon(sensor)}
+                                      </div>
+                                      <p className="text-xs text-gray-600">
+                                        {sensor.name_en}
+                                      </p>
+                                      <div className="mt-1 text-[11px] text-gray-500 space-y-0.5">
+                                        {sensor.sensor_name && (
+                                          <p className="truncate">
+                                            {sensor.sensor_name}
+                                          </p>
+                                        )}
+                                        {sensor.sensor_number && (
+                                          <p>
+                                            Sensor #: {sensor.sensor_number}
+                                          </p>
+                                        )}
+                                        {sensor.floor && (
+                                          <p>Floor: {sensor.floor}</p>
+                                        )}
+                                      </div>
+                                      {sensor.records &&
+                                        sensor.records.length > 0 &&
+                                        sensor.records[
+                                          sensor.records.length - 1
+                                        ].date_time && (
+                                          <p className="text-xs text-gray-500">
+                                            Last:{" "}
+                                            {new Date(
+                                              sensor.records[
+                                                sensor.records.length - 1
+                                              ].date_time
+                                            ).toLocaleString("en-US", {
+                                              month: "short",
+                                              day: "numeric",
+                                              hour: "2-digit",
+                                              minute: "2-digit",
+                                              hour12: false,
+                                            })}
+                                          </p>
+                                        )}
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-lg font-bold text-gray-900">
+                                        {!sensor.is_active
+                                          ? "--"
+                                          : Math.round(
+                                              getSensorAverage(sensor)
+                                            )}{" "}
+                                        dB
+                                      </div>
+                                    </div>
                                   </div>
-                                  <p className="text-xs text-gray-600">
-                                    {sensor.name_en}
-                                  </p>
-                                  {sensor.records && sensor.records.length > 0 && sensor.records[sensor.records.length - 1].date_time && (
-                                    <p className="text-xs text-gray-500">
-                                      Last: {new Date(sensor.records[sensor.records.length - 1].date_time).toLocaleString('en-US', {
-                                        month: 'short',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: false
-                                      })}
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="text-right">
-                                  <div className="text-lg font-bold text-gray-900">
-                                    {!sensor.is_active
-                                      ? "--"
-                                      : Math.round(sensor.avg)}{" "}
-                                    LV
-                                  </div>
-                                </div>
-                              </div>
-                              {/* 
+                                  {/* 
                               <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
                                 <span>Battery</span>
                                 <span
@@ -865,7 +1119,7 @@ function App() {
                                 </span>
                               </div> */}
 
-                              {/* <div className="w-full bg-gray-200 rounded-full h-1">
+                                  {/* <div className="w-full bg-gray-200 rounded-full h-1">
                                 <div
                                   className={`h-1 rounded-full transition-all duration-500 ${getProgressColor(
                                     sensor.status
@@ -882,25 +1136,25 @@ function App() {
                                 />
                               </div> */}
 
-                              <div className="mt-2">
-                                <MiniChart
-                                  data={
-                                    sensor.is_active
-                                      ? getSensorAvgValues(dept, sensor.id)
-                                      : [10, 9, 10, 6, 10, 8, 10, 6, 10, 9]
-                                  }
-                                  color={getProgressColor(
-                                    sensor.is_active ? sensor.color : "offline"
-                                  )}
-                                />
-                              </div>
-                            </div>
-                          ))}
+                                  <div className="mt-2">
+                                    <MiniChart
+                                      data={
+                                        sensor.is_active
+                                          ? getSensorAvgValues(sensor)
+                                          : [10, 9, 10, 6, 10, 8, 10, 6, 10, 9]
+                                      }
+                                      color={getProgressColor(wifiStatus)}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -956,7 +1210,7 @@ function App() {
             </div> */}
 
             {/* Sensor Status Overview */}
-            <div className="hidden lg:block bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+            {/* <div className="hidden lg:block bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
               <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-3 sm:mb-4 flex items-center gap-2">
                 <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                 Sensor Status
@@ -1019,56 +1273,12 @@ function App() {
                   );
                 })}
               </div>
-            </div>
-
-            {/* Quick Actions - Desktop Only */}
-            <div className="hidden lg:block bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-3 sm:mb-4">
-                Quick Actions
-              </h2>
-
-              <div className="space-y-2 sm:space-y-3">
-                <button 
-                  onClick={openReportsModal}
-                  className="w-full p-2 sm:p-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-sm sm:text-base font-medium transition-colors"
-                >
-                  Generate Report
-                </button>
-                <button 
-                  onClick={openHeatmapModal}
-                  className="w-full p-2 sm:p-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-sm sm:text-base font-medium transition-colors"
-                >
-                  الخريطة الحرارية والاتجاهات
-                </button>
-                <button 
-                  onClick={openSensorGraphModal}
-                  className="w-full p-2 sm:p-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-sm sm:text-base font-medium transition-colors"
-                >
-                  📊 Sensor Graph Analysis
-                </button>
-                <button className="w-full p-2 sm:p-3 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-sm sm:text-base font-medium transition-colors">
-                  Export Sensor Data
-                </button>
-                <button 
-                  onClick={openAlertConfigModal}
-                  className="w-full p-2 sm:p-3 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-lg text-sm sm:text-base font-medium transition-colors"
-                >
-                  Configure Alerts
-                </button>
-                <a
-                  target="_blank"
-                  href="https://sound-level-dashboard.vision-jo.com/admin/soundlevel/"
-                  className="w-full flex items-center justify-center p-2 sm:p-3 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-lg text-sm sm:text-base font-medium transition-colors"
-                >
-                  Sensor Maintenance
-                </a>
-              </div>
-            </div>
+            </div> */}
           </div>
         </div>
 
         {/* Mobile: Sensor Status Overview */}
-        <div className="lg:hidden bg-white rounded-xl shadow-sm border border-gray-100 p-4 mt-6">
+        {/* <div className="lg:hidden bg-white rounded-xl shadow-sm border border-gray-100 p-4 mt-6">
           <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
             <Activity className="h-5 w-5 text-blue-600" />
             Sensor Status
@@ -1130,47 +1340,7 @@ function App() {
               );
             })}
           </div>
-        </div>
-
-        {/* Mobile: Quick Actions Section - Moved to the end */}
-        <div className="lg:hidden bg-white rounded-xl shadow-sm border border-gray-100 p-4 mt-6">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            Quick Actions
-          </h2>
-
-          <div className="space-y-3">
-            <button 
-              onClick={openReportsModal}
-              className="w-full p-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-base font-medium transition-colors"
-            >
-              Generate Report
-            </button>
-            <button 
-              onClick={openHeatmapModal}
-              className="w-full p-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-base font-medium transition-colors"
-            >
-              الخريطة الحرارية والاتجاهات
-            </button>
-            <button 
-              onClick={openSensorGraphModal}
-              className="w-full p-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-base font-medium transition-colors"
-            >
-              📊 Sensor Graph Analysis
-            </button>
-            <button className="w-full p-3 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-base font-medium transition-colors">
-              Export Sensor Data
-            </button>
-            <button 
-              onClick={openAlertConfigModal}
-              className="w-full p-3 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-lg text-base font-medium transition-colors"
-            >
-              Configure Alerts
-            </button>
-            <button className="w-full p-3 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-lg text-base font-medium transition-colors">
-              Sensor Maintenance
-            </button>
-          </div>
-        </div>
+        </div> */}
       </div>
 
       {/* Sensor Modal */}
@@ -1185,6 +1355,7 @@ function App() {
       <ReportsModal
         isOpen={isReportsModalOpen}
         onClose={closeReportsModal}
+        departments={departments}
       />
 
       {/* Heatmap Modal */}

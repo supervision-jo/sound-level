@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { X, Activity, Wifi, WifiOff, Calendar, TrendingUp, AlertTriangle } from 'lucide-react';
-import axios from 'axios';
 
 interface SensorModalProps {
   sensor: any;
@@ -17,43 +16,42 @@ const SensorModal: React.FC<SensorModalProps> = ({ sensor, department, isOpen, o
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isOpen && sensor) {
-      fetchSensorData();
+    if (!isOpen || !sensor) {
+      return;
     }
-  }, [isOpen, sensor, timeFrame]);
 
-  const fetchSensorData = async () => {
     setLoading(true);
-    try {
-      // Validate sensor.id before making the request
-      if (!sensor.id || (typeof sensor.id !== 'string' && typeof sensor.id !== 'number')) {
-        console.error('Invalid sensor ID:', sensor.id);
-        setSensorData(sensor);
-        return;
-      }
 
-      const config = {
-        method: 'get',
-        maxBodyLength: Infinity,
-        url: `https://sound-level-dashboard.vision-jo.com/soundlevel/dashboard/sensor/${sensor.id}?time=${timeFrame}`,
-        headers: {},
-      };
-
-      const response = await axios.request(config);
-      // The API returns an array with one department containing the sensor data
-      if (response.data && response.data.length > 0 && response.data[0].sensors && response.data[0].sensors.length > 0) {
-        setSensorData(response.data[0].sensors[0]);
-      } else {
-        setSensorData(sensor);
+    const timeframeSeconds = Number(timeFrame);
+    const now = Date.now();
+    const filteredRecords = sensor.records?.filter((record: any) => {
+      if (!record?.date_time) {
+        return true;
       }
-    } catch (error) {
-      console.error('Error fetching sensor data:', error);
-      // Use existing sensor data as fallback
+      const recordTime = new Date(record.date_time).getTime();
+      if (Number.isNaN(recordTime)) {
+        return true;
+      }
+      return now - recordTime <= timeframeSeconds * 1000;
+    }) ?? [];
+
+    if (!filteredRecords.length) {
       setSensorData(sensor);
-    } finally {
       setLoading(false);
+      return;
     }
-  };
+
+    const average =
+      filteredRecords.reduce((sum: number, record: any) => sum + parseFloat(record.avg), 0) /
+      filteredRecords.length;
+
+    setSensorData({
+      ...sensor,
+      records: filteredRecords,
+      avg: average,
+    });
+    setLoading(false);
+  }, [isOpen, sensor, timeFrame]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
