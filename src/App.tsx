@@ -377,6 +377,38 @@ function App() {
     return sum / values.length;
   };
 
+  const getSensorNoiseStatus = (sensor: any) => {
+    if (!sensor?.is_active) {
+      return "offline";
+    }
+
+    const average = getSensorAverage(sensor);
+    if (!Number.isFinite(average) || average <= 0) {
+      return "offline";
+    }
+
+    const yellowStartRaw = sensor?.dashboard_yellow_light_start ?? sensor?.yellow;
+    const redStartRaw = sensor?.dashboard_red_light_start ?? sensor?.red;
+
+    const yellowStart = Number.isFinite(Number(yellowStartRaw))
+      ? Number(yellowStartRaw)
+      : 60;
+
+    const redStart = Number.isFinite(Number(redStartRaw))
+      ? Number(redStartRaw)
+      : yellowStart + 10;
+
+    if (average >= redStart) {
+      return "red";
+    }
+
+    if (average >= yellowStart) {
+      return "yellow";
+    }
+
+    return "green";
+  };
+
   const getLatestWifiSignal = (sensor: any) => {
     if (!sensor) {
       return null;
@@ -1039,6 +1071,7 @@ function App() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {dept.sensors.map((sensor: any) => {
                               const wifiStatus = getWifiSignalStatus(sensor);
+                              const noiseStatus = getSensorNoiseStatus(sensor);
                               return (
                                 <div
                                   key={sensor.id}
@@ -1046,7 +1079,7 @@ function App() {
                                     handleSensorClick(sensor, dept)
                                   }
                                   className={`p-3 rounded-lg border ${getStatusColor(
-                                    wifiStatus
+                                    noiseStatus
                                   )} cursor-pointer hover:shadow-md transition-all duration-200`}
                                 >
                                   <div className="flex items-start justify-between mb-2">
@@ -1073,6 +1106,20 @@ function App() {
                                         )}
                                         {sensor.floor && (
                                           <p>Floor: {sensor.floor}</p>
+                                        )}
+                                        {sensor.last_data_update && (
+                                          <p>
+                                            Updated:{" "}
+                                            {new Date(
+                                              sensor.last_data_update
+                                            ).toLocaleString("en-US", {
+                                              month: "short",
+                                              day: "numeric",
+                                              hour: "2-digit",
+                                              minute: "2-digit",
+                                              hour12: false,
+                                            })}
+                                          </p>
                                         )}
                                       </div>
                                       {sensor.records &&
@@ -1143,7 +1190,7 @@ function App() {
                                           ? getSensorAvgValues(sensor)
                                           : [10, 9, 10, 6, 10, 8, 10, 6, 10, 9]
                                       }
-                                      color={getProgressColor(wifiStatus)}
+                                      color={getProgressColor(noiseStatus)}
                                     />
                                   </div>
                                 </div>
@@ -1343,13 +1390,14 @@ function App() {
         </div> */}
       </div>
 
-      {/* Sensor Modal */}
+      {/* Sensor Modal
       <SensorModal
         sensor={selectedSensor}
         department={selectedDepartment}
         isOpen={isSensorModalOpen}
         onClose={closeSensorModal}
       />
+      */}
 
       {/* Reports Modal */}
       <ReportsModal
