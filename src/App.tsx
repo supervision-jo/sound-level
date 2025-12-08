@@ -15,15 +15,62 @@ import ReportsModal from "./components/ReportsModal";
 import HeatmapModal from "./components/HeatmapModal";
 import SensorGraphModal from "./components/SensorGraphModal";
 import AlertConfigModal from "./components/AlertConfigModal";
+import { Navigate } from "react-router";
 
 const SENSOR_DATA_WS_URL = "wss://sound-level.vision-jo.com/ws/sensor-data/";
+const LOGIN_API_URL = "https://sound-level.vision-jo.com/api/auth/login/";
 const WS_RECONNECT_DELAY = 5000;
 const WS_HEARTBEAT_INTERVAL = 30000;
+const SENSOR_STALE_TIMEOUT_MS = 15 * 60 * 1000;
+const USER_STORAGE_KEY = "userProfile";
 
 interface User {
   username: string;
-  role: "admin" | "doctor" | "nurse";
+  firstName?: string;
+  lastName?: string;
+  email?: string;
 }
+
+const pickString = (...values: Array<unknown>) => {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+  return undefined;
+};
+
+const loadStoredUser = (): User | null => {
+  try {
+    const raw = localStorage.getItem(USER_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.username === "string") {
+      return parsed as User;
+    }
+    return null;
+  } catch (error) {
+    console.warn("Failed to parse stored user", error);
+    return null;
+  }
+};
+
+const persistUser = (userData: User | null) => {
+  try {
+    if (!userData) {
+      localStorage.removeItem(USER_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+  } catch (error) {
+    console.warn("Failed to persist user", error);
+  }
+};
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
@@ -48,31 +95,102 @@ function App() {
   const [isSensorGraphModalOpen, setIsSensorGraphModalOpen] = useState(false);
   const [isAlertConfigModalOpen, setIsAlertConfigModalOpen] = useState(false);
 
-  // Demo users for authentication
-  const demoUsers = {
-    admin: { password: "admin123", role: "admin" as const },
-    doctor: { password: "doctor123", role: "doctor" as const },
-    nurse: { password: "nurse123", role: "nurse" as const },
-  };
-
   const handleLogin = async (username: string, password: string) => {
     setIsLoading(true);
     setLoginError("");
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const response = await fetch(LOGIN_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
 
-    const user = demoUsers[username as keyof typeof demoUsers];
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch (_error) {
+        data = null;
+      }
 
-    if (user && user.password === password) {
-      setUser({ username, role: user.role });
+      if (!response.ok) {
+        const message =
+          data?.detail ??
+          data?.message ??
+          data?.error ??
+          "Invalid username or password. Please try again.";
+        throw new Error(message);
+      }
+
+      if (!data) {
+        throw new Error("Unexpected empty response from server.");
+      }
+
+      const accessToken =
+        data.access ?? data.token ?? data.access_token ?? data?.data?.token;
+      const refreshToken =
+        data.refresh ?? data.refresh_token ?? data?.data?.refresh;
+
+      if (!accessToken) {
+        throw new Error("Authentication token missing in response.");
+      }
+
+      localStorage.setItem("token", accessToken);
+      if (refreshToken) {
+        localStorage.setItem("refreshToken", refreshToken);
+      } else {
+        localStorage.removeItem("refreshToken");
+      }
+
+      const apiUser =
+        data.user ??
+        data.profile ??
+        data.data?.user ??
+        data.data?.profile ??
+        data;
+
+      const normalizedUser: User = {
+        username:
+          pickString(
+            apiUser?.username,
+            data?.username,
+            data?.user_name,
+            username
+          ) ?? username,
+        firstName: pickString(
+          apiUser?.first_name,
+          apiUser?.firstName,
+          data?.first_name,
+          data?.firstName
+        ),
+        lastName: pickString(
+          apiUser?.last_name,
+          apiUser?.lastName,
+          data?.last_name,
+          data?.lastName
+        ),
+        email: pickString(apiUser?.email, data?.email, data?.user_email),
+      };
+
+      setUser(normalizedUser);
+      persistUser(normalizedUser);
       setIsAuthenticated(true);
       setLoginError("");
-    } else {
-      setLoginError("Invalid username or password. Please try again.");
+    } catch (error) {
+      console.error("Login failed:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to login. Please try again.";
+      setLoginError(message);
+      localStorage.removeItem("token");
+      localStorage.removeItem("refreshToken");
+      persistUser(null);
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   const handleLogout = () => {
@@ -80,6 +198,8 @@ function App() {
     setUser(null);
     setLoginError("");
     localStorage.removeItem("token");
+    localStorage.removeItem("refreshToken");
+    persistUser(null);
   };
 
   // useEffect(() => {
@@ -184,6 +304,59 @@ function App() {
       setExpandedDepartments(allIds);
     }
   }, [departments]);
+
+  useEffect(() => {
+    const syncAuthState = () => {
+      const hasToken = Boolean(localStorage.getItem("token"));
+      setIsAuthenticated((prev) => (prev === hasToken ? prev : hasToken));
+
+      if (!hasToken) {
+        if (user !== null) {
+          setUser(null);
+        }
+        persistUser(null);
+      } else if (!user) {
+        const storedUser = loadStoredUser();
+        if (storedUser) {
+          setUser(storedUser);
+        }
+      }
+    };
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        syncAuthState();
+      }
+    };
+
+    syncAuthState();
+    window.addEventListener("storage", syncAuthState);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("storage", syncAuthState);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      if (user !== null) {
+        setUser(null);
+      }
+      persistUser(null);
+      return;
+    }
+
+    if (!user) {
+      const storedUser = loadStoredUser();
+      if (storedUser) {
+        setUser(storedUser);
+      }
+    } else {
+      persistUser(user);
+    }
+  }, [isAuthenticated, user]);
 
   const toggleDepartment = (deptId: string) => {
     setExpandedDepartments((prev) => {
@@ -346,8 +519,31 @@ function App() {
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
-  const getSensorValues = (sensor: any) => {
+  const isSensorActive = (sensor: any) => {
     if (!sensor) {
+      return false;
+    }
+
+    if (!sensor.is_active) {
+      return false;
+    }
+
+    const lastUpdateRaw = sensor.last_data_update;
+    if (!lastUpdateRaw) {
+      return true;
+    }
+
+    const lastUpdate = new Date(lastUpdateRaw);
+    if (Number.isNaN(lastUpdate.getTime())) {
+      return true;
+    }
+
+    const elapsed = Date.now() - lastUpdate.getTime();
+    return elapsed <= SENSOR_STALE_TIMEOUT_MS;
+  };
+
+  const getSensorValues = (sensor: any) => {
+    if (!sensor || !isSensorActive(sensor)) {
       return [];
     }
 
@@ -377,17 +573,9 @@ function App() {
     return sum / values.length;
   };
 
-  const getSensorNoiseStatus = (sensor: any) => {
-    if (!sensor?.is_active) {
-      return "offline";
-    }
-
-    const average = getSensorAverage(sensor);
-    if (!Number.isFinite(average) || average <= 0) {
-      return "offline";
-    }
-
-    const yellowStartRaw = sensor?.dashboard_yellow_light_start ?? sensor?.yellow;
+  const getSensorThresholds = (sensor: any) => {
+    const yellowStartRaw =
+      sensor?.dashboard_yellow_light_start ?? sensor?.yellow;
     const redStartRaw = sensor?.dashboard_red_light_start ?? sensor?.red;
 
     const yellowStart = Number.isFinite(Number(yellowStartRaw))
@@ -397,6 +585,21 @@ function App() {
     const redStart = Number.isFinite(Number(redStartRaw))
       ? Number(redStartRaw)
       : yellowStart + 10;
+
+    return { yellowStart, redStart };
+  };
+
+  const getSensorNoiseStatus = (sensor: any) => {
+    if (!isSensorActive(sensor)) {
+      return "offline";
+    }
+
+    const average = getSensorAverage(sensor);
+    if (!Number.isFinite(average) || average <= 0) {
+      return "offline";
+    }
+
+    const { yellowStart, redStart } = getSensorThresholds(sensor);
 
     if (average >= redStart) {
       return "red";
@@ -428,7 +631,7 @@ function App() {
 
   // Wi-Fi RSSI thresholds (dBm) derived from common signal-strength guidelines
   const getWifiSignalStatus = (sensor: any) => {
-    if (!sensor?.is_active) {
+    if (!isSensorActive(sensor)) {
       return "offline";
     }
 
@@ -474,6 +677,68 @@ function App() {
     }
 
     return total / count;
+  };
+
+  const getDepartmentThresholds = (dept: any) => {
+    const sensors = Array.isArray(dept?.sensors) ? dept.sensors : [];
+    if (!sensors.length) {
+      return { yellowStart: 60, redStart: 70 };
+    }
+
+    let yellowSum = 0;
+    let redSum = 0;
+    let yellowCount = 0;
+    let redCount = 0;
+
+    sensors.forEach((sensor: any) => {
+      const { yellowStart, redStart } = getSensorThresholds(sensor);
+      if (Number.isFinite(yellowStart)) {
+        yellowSum += yellowStart;
+        yellowCount += 1;
+      }
+      if (Number.isFinite(redStart)) {
+        redSum += redStart;
+        redCount += 1;
+      }
+    });
+
+    const yellowStart = yellowCount > 0 ? yellowSum / yellowCount : 60;
+    const redStart = redCount > 0 ? redSum / redCount : yellowStart + 10;
+
+    return { yellowStart, redStart };
+  };
+
+  const getDepartmentNoiseStatus = (
+    dept: any,
+    thresholds?: { yellowStart: number; redStart: number }
+  ) => {
+    const sensors = Array.isArray(dept?.sensors) ? dept.sensors : [];
+    const deptAverage = getDepartmentAverage(dept);
+
+    if (!Number.isFinite(deptAverage) || deptAverage <= 0) {
+      return "offline";
+    }
+
+    const hasActiveSensor = sensors.some((sensor: any) =>
+      isSensorActive(sensor)
+    );
+
+    if (!hasActiveSensor) {
+      return "offline";
+    }
+
+    const { yellowStart, redStart } =
+      thresholds ?? getDepartmentThresholds(dept);
+
+    if (deptAverage >= redStart) {
+      return "red";
+    }
+
+    if (deptAverage >= yellowStart) {
+      return "yellow";
+    }
+
+    return "green";
   };
 
   const dashboardStats = useMemo(() => {
@@ -577,6 +842,13 @@ function App() {
   const getSensoresStatus = (sensor: any) => {
     return getSensorAverage(sensor);
   };
+
+  const displayFullName = [user?.firstName, user?.lastName]
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter(Boolean)
+    .join(" ");
+
+  const userEmail = typeof user?.email === "string" ? user.email.trim() : "";
 
   // const getNoiseLevel = (house: any, red: any, yellow: any) => {
   //   for (const sensor of house.sensors) {
@@ -687,14 +959,19 @@ function App() {
                 </div>
                 <div className="h-8 sm:h-12 w-px bg-gray-200" />
               </div>
-              <div className="flex flex-col gap-3 items-center justify-between border-gray-100">
-                <div className="flex items-center gap-2">
-                  <div className="text-sm font-medium text-gray-800">
-                    Mahmoud
+              <div className="flex flex-col gap-2 items-end sm:items-start border-gray-100 text-right sm:text-left">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {user?.username ?? "User"}
                   </div>
-                  <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full capitalize">
-                    Doctor
-                  </span>
+                  {displayFullName && (
+                    <div className="text-xs text-gray-600">
+                      {displayFullName}
+                    </div>
+                  )}
+                  {userEmail && (
+                    <div className="text-xs text-gray-500">{userEmail}</div>
+                  )}
                 </div>
                 <button
                   onClick={handleLogout}
@@ -895,7 +1172,7 @@ function App() {
                 Generate Report
               </button>
               <button
-                onClick={openReportsModal}
+                onClick={() => window.open("https://sound-level.vision-jo.com/admin", "_blank")}
                 className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors"
               >
                 Settings
@@ -988,10 +1265,15 @@ function App() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
                 {departments?.map((dept: any) => {
                   const deptAverage = getDepartmentAverage(dept);
-                  const rawThreshold = Number(dept?.red);
+                  const deptThresholds = getDepartmentThresholds(dept);
+                  const departmentStatus = getDepartmentNoiseStatus(
+                    dept,
+                    deptThresholds
+                  );
                   const maxRange =
-                    Number.isFinite(rawThreshold) && rawThreshold > 0
-                      ? rawThreshold * 1.5
+                    Number.isFinite(deptThresholds.redStart) &&
+                    deptThresholds.redStart > 0
+                      ? deptThresholds.redStart * 1.5
                       : 120;
                   const progressRatio =
                     maxRange > 0 ? (deptAverage / maxRange) * 100 : 0;
@@ -1004,12 +1286,12 @@ function App() {
                     <div
                       key={dept.id}
                       className={`h-full flex flex-col rounded-lg border-2 transition-all duration-300 ${getStatusColor(
-                        dept.color
+                        departmentStatus
                       )}`}
                     >
                       {/* Department Header */}
                       <div
-                        className="p-3 sm:p-4 cursor-pointer"
+                        className="p-3 sm:p-4"
                         onClick={() => toggleDepartment(dept.id)}
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 sm:mb-3 gap-2 sm:gap-0">
@@ -1037,7 +1319,7 @@ function App() {
                             <div className="w-16 sm:w-24">
                               <MiniChart
                                 data={getAllSensorsAvgValues(dept)}
-                                color={getProgressColor(dept.color)}
+                                color={getProgressColor(departmentStatus)}
                               />
                             </div>
                           </div>
@@ -1051,7 +1333,7 @@ function App() {
                           <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
                             <div
                               className={`h-1.5 sm:h-2 rounded-full transition-all duration-500 ${getProgressColor(
-                                dept.color
+                                departmentStatus
                               )}`}
                               style={{
                                 width: `${clampedRatio}%`,
@@ -1080,7 +1362,7 @@ function App() {
                                   }
                                   className={`p-3 rounded-lg border ${getStatusColor(
                                     noiseStatus
-                                  )} cursor-pointer hover:shadow-md transition-all duration-200`}
+                                  )} hover:shadow-md transition-all duration-200`}
                                 >
                                   <div className="flex items-start justify-between mb-2">
                                     <div className="flex-1">
@@ -1145,7 +1427,7 @@ function App() {
                                     </div>
                                     <div className="text-right">
                                       <div className="text-lg font-bold text-gray-900">
-                                        {!sensor.is_active
+                                        {!isSensorActive(sensor)
                                           ? "--"
                                           : Math.round(
                                               getSensorAverage(sensor)
@@ -1186,7 +1468,7 @@ function App() {
                                   <div className="mt-2">
                                     <MiniChart
                                       data={
-                                        sensor.is_active
+                                        isSensorActive(sensor)
                                           ? getSensorAvgValues(sensor)
                                           : [10, 9, 10, 6, 10, 8, 10, 6, 10, 9]
                                       }
@@ -1400,32 +1682,32 @@ function App() {
       */}
 
       {/* Reports Modal */}
-      <ReportsModal
+      {/* <ReportsModal
         isOpen={isReportsModalOpen}
         onClose={closeReportsModal}
         departments={departments}
-      />
+      /> */}
 
       {/* Heatmap Modal */}
-      <HeatmapModal
+      {/* <HeatmapModal
         isOpen={isHeatmapModalOpen}
         onClose={closeHeatmapModal}
         departments={departments}
-      />
+      /> */}
 
       {/* Sensor Graph Modal */}
-      <SensorGraphModal
+      {/* <SensorGraphModal
         isOpen={isSensorGraphModalOpen}
         onClose={closeSensorGraphModal}
         departments={departments}
-      />
+      /> */}
 
       {/* Alert Config Modal */}
-      <AlertConfigModal
+      {/* <AlertConfigModal
         isOpen={isAlertConfigModalOpen}
         onClose={closeAlertConfigModal}
         departments={departments}
-      />
+      /> */}
     </div>
   );
 }
