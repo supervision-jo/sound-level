@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import LoginForm from "./pages/Login";
 import SensorModal from "./components/SensorModal";
-import ReportsModal from "./components/ReportsModal";
+import ApiReportModal from "./components/ApiReportModal";
 import HeatmapModal from "./components/HeatmapModal";
 import SensorGraphModal from "./components/SensorGraphModal";
 import AlertConfigModal from "./components/AlertConfigModal";
@@ -1172,7 +1172,12 @@ function App() {
                 Generate Report
               </button>
               <button
-                onClick={() => window.open("https://sound-level.vision-jo.com/admin", "_blank")}
+                onClick={() =>
+                  window.open(
+                    "https://sound-level.vision-jo.com/admin",
+                    "_blank"
+                  )
+                }
                 className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors"
               >
                 Settings
@@ -1681,12 +1686,8 @@ function App() {
       />
       */}
 
-      {/* Reports Modal */}
-      {/* <ReportsModal
-        isOpen={isReportsModalOpen}
-        onClose={closeReportsModal}
-        departments={departments}
-      /> */}
+      {/* API Reports Modal (simple selector for report 1–8 + date range) */}
+      <ApiReportModal isOpen={isReportsModalOpen} onClose={closeReportsModal} />
 
       {/* Heatmap Modal */}
       {/* <HeatmapModal
