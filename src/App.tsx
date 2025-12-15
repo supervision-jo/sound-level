@@ -235,6 +235,8 @@ function App() {
       }
     };
 
+    console.log(departments);
+
     const clearHeartbeat = () => {
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
@@ -262,7 +264,7 @@ function App() {
       ws.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          console.log("WebSocket payload received:", payload);
+          // console.log("WebSocket payload received:", payload);
           handlePayload(payload);
         } catch (error) {
           console.error("Failed to parse websocket payload", error);
@@ -763,11 +765,12 @@ function App() {
       summary.totalSensors += sensors.length;
 
       sensors.forEach((sensor: any) => {
-        const wifiStatus = getWifiSignalStatus(sensor);
-        if (wifiStatus === "red") {
+        const noiseStatus = getSensorNoiseStatus(sensor);
+        if (noiseStatus === "red" || noiseStatus === "yellow") {
           summary.criticalSensors += 1;
         }
 
+        const wifiStatus = getWifiSignalStatus(sensor);
         if (wifiStatus === "offline") {
           summary.offlineSensors += 1;
         }
@@ -838,7 +841,7 @@ function App() {
     );
   };
 
-  console.log(departments, "departments");
+  // console.log(departments, "departments");
 
   const getSensoresStatus = (sensor: any) => {
     return getSensorAverage(sensor);
