@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Wifi,
   WifiOff,
+  FileSpreadsheet,
 } from "lucide-react";
 import LoginForm from "./pages/Login";
 import SensorModal from "./components/SensorModal";
@@ -1167,9 +1168,10 @@ function App() {
             <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={openReportsModal}
-                className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-sm font-medium transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-1 transition-colors"
               >
-                Generate Report
+                <FileSpreadsheet className="h-4 w-4 text-blue-50" />
+                <span>Generate report</span>
               </button>
               <button
                 onClick={() =>

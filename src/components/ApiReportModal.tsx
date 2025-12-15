@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { FileSpreadsheet } from "lucide-react";
 
 interface ApiReportModalProps {
   isOpen: boolean;
@@ -55,6 +56,8 @@ const buildFilenameWithDates = (
 };
 
 const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
+  const today = new Date().toISOString().split("T")[0];
+
   const [reportId, setReportId] = useState<ReportId>(1);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
@@ -69,6 +72,22 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
   const handleGenerate = async () => {
     setError(null);
     setSuccess(null);
+
+    // Basic date validation against today's date and range consistency
+    if (fromDate && fromDate > today) {
+      setError("Start date cannot be in the future.");
+      return;
+    }
+
+    if (toDate && toDate > today) {
+      setError("End date cannot be in the future.");
+      return;
+    }
+
+    if (fromDate && toDate && fromDate > toDate) {
+      setError("Start date cannot be after end date.");
+      return;
+    }
 
     const token = localStorage.getItem("token");
     if (!token) {
@@ -157,8 +176,8 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
           <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-50/80 via-white to-blue-50/60">
             <div>
               <h2 className="text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-sm font-bold">
-                  R
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                  <FileSpreadsheet className="h-4 w-4" />
                 </span>
                 Generate Excel Report
               </h2>
@@ -215,7 +234,6 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
                   <input
                     type="date"
                     value={fromDate}
-                    max={toDate || undefined}
                     onChange={(e) => setFromDate(e.target.value)}
                     className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                   />
@@ -227,7 +245,6 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
                   <input
                     type="date"
                     value={toDate}
-                    min={fromDate || undefined}
                     onChange={(e) => setToDate(e.target.value)}
                     className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                   />
@@ -267,9 +284,12 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
                 type="button"
                 onClick={handleGenerate}
                 disabled={isSubmitting}
-                className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-1 disabled:cursor-not-allowed disabled:bg-blue-400"
               >
-                {isSubmitting ? "Generating..." : "Download report"}
+                <FileSpreadsheet className="h-4 w-4 text-blue-50" />
+                <span>
+                  {isSubmitting ? "Generating..." : "Generate report"}
+                </span>
               </button>
             </div>
           </div>
