@@ -9,8 +9,10 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { Calendar, TrendingUp, X, ArrowLeft } from "lucide-react";
+import { TrendingUp, X, ArrowLeft, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 interface Sensor {
   id: number;
@@ -56,10 +58,19 @@ const THRESHOLD_OPTIONS = [
   { key: "percentage_above_75", label: "> 75°C", color: "#7f1d1d" },
 ];
 
-const getYesterdayDate = (): string => {
+const getYesterdayDate = (): Date => {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  return yesterday.toISOString().split("T")[0];
+  yesterday.setHours(0, 0, 0, 0);
+  return yesterday;
+};
+
+const dateToString = (date: Date | null): string => {
+  if (!date) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 interface CustomLegendProps {
@@ -121,8 +132,8 @@ export default function SensorComparisonGraph() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [selectedSensors, setSelectedSensors] = useState<number[]>([]);
-  const [startDate, setStartDate] = useState(getYesterdayDate());
-  const [endDate, setEndDate] = useState(getYesterdayDate());
+  const [startDate, setStartDate] = useState<Date | null>(getYesterdayDate());
+  const [endDate, setEndDate] = useState<Date | null>(getYesterdayDate());
   const [selectedThreshold, setSelectedThreshold] = useState<string>(
     "percentage_above_50"
   );
@@ -131,6 +142,7 @@ export default function SensorComparisonGraph() {
   const [loadingSensors, setLoadingSensors] = useState(true);
   const [showSensorDropdown, setShowSensorDropdown] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [hasFetchedData, setHasFetchedData] = useState(false);
 
   useEffect(() => {
     fetchSensors();
@@ -195,16 +207,18 @@ export default function SensorComparisonGraph() {
   };
 
   const fetchGraphData = async () => {
-    if (selectedSensors.length === 0) return;
+    if (selectedSensors.length === 0 || !startDate || !endDate) return;
 
     setLoading(true);
     try {
       const sensorIds = selectedSensors.join(",");
+      const startDateStr = dateToString(startDate);
+      const endDateStr = dateToString(endDate);
       console.log("=== FETCHING GRAPH DATA ===");
       console.log("Selected sensor IDs:", sensorIds);
-      console.log("Date range:", startDate, "to", endDate);
+      console.log("Date range:", startDateStr, "to", endDateStr);
 
-      const url = `https://sound-level.vision-jo.com/api/hour-summaries/graph/?sensor_ids=${sensorIds}&start_date=${startDate}&end_date=${endDate}`;
+      const url = `https://sound-level.vision-jo.com/api/hour-summaries/graph/?sensor_ids=${sensorIds}&start_date=${startDateStr}&end_date=${endDateStr}`;
       console.log("API URL:", url);
 
       const response = await fetch(url);
@@ -213,8 +227,10 @@ export default function SensorComparisonGraph() {
 
       const processedData = processDataForGraph(data);
       setGraphData(processedData);
+      setHasFetchedData(true);
     } catch (error) {
       console.error("Error fetching graph data:", error);
+      setHasFetchedData(true);
     } finally {
       setLoading(false);
     }
@@ -407,30 +423,28 @@ export default function SensorComparisonGraph() {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   تاريخ البداية
                 </label>
-                <div className="relative">
-                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full pr-10 pl-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 [&::-webkit-calendar-picker-indicator]:hidden"
-                  />
-                </div>
+                <DatePicker
+                  selected={startDate}
+                  onChange={(date: Date | null) => setStartDate(date)}
+                  dateFormat="dd/MM/yyyy"
+                  wrapperClassName="w-full"
+                  className="w-full pr-4 pl-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-300"
+                  placeholderText="اختر التاريخ"
+                />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   تاريخ النهاية
                 </label>
-                <div className="relative">
-                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full pr-10 pl-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 [&::-webkit-calendar-picker-indicator]:hidden"
-                  />
-                </div>
+                <DatePicker
+                  selected={endDate}
+                  onChange={(date: Date | null) => setEndDate(date)}
+                  dateFormat="dd/MM/yyyy"
+                  wrapperClassName="w-full"
+                  className="w-full pr-4 pl-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-300"
+                  placeholderText="اختر التاريخ"
+                />
               </div>
             </div>
           </div>
@@ -512,76 +526,107 @@ export default function SensorComparisonGraph() {
             {loading ? "جاري التحميل..." : "عرض البيانات"}
           </button>
 
-          {graphData.length > 0 && (
-            <div className="mt-8 bg-gradient-to-br from-gray-50 to-white p-6 rounded-xl border-2 border-gray-100">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-gray-800 mb-4">
-                  الرسم البياني
-                </h2>
-                <div className="flex flex-wrap gap-4 justify-center p-4 bg-white rounded-lg border border-gray-200">
-                  {selectedSensorDetails.map((sensor, index) => (
-                    <div
-                      key={sensor.id}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg"
-                    >
-                      <div
-                        className="w-6 h-1.5 rounded-full"
-                        style={{ backgroundColor: getSensorColor(index) }}
-                      />
-                      <span className="text-sm font-bold text-gray-800">
-                        {sensor.sensor_name}
-                      </span>
-                      <span className="text-xs font-medium text-gray-600">
-                        ({sensor.department_name})
-                      </span>
+          {hasFetchedData && !loading && (
+            <>
+              {graphData.length > 0 ? (
+                <div className="mt-8 bg-gradient-to-br from-gray-50 to-white p-6 rounded-xl border-2 border-gray-100">
+                  <div className="mb-6">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4">
+                      الرسم البياني
+                    </h2>
+                    <div className="flex flex-wrap gap-4 justify-center p-4 bg-white rounded-lg border border-gray-200">
+                      {selectedSensorDetails.map((sensor, index) => (
+                        <div
+                          key={sensor.id}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg"
+                        >
+                          <div
+                            className="w-6 h-1.5 rounded-full"
+                            style={{ backgroundColor: getSensorColor(index) }}
+                          />
+                          <span className="text-sm font-bold text-gray-800">
+                            {sensor.sensor_name}
+                          </span>
+                          <span className="text-xs font-medium text-gray-600">
+                            ({sensor.department_name})
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                  <ResponsiveContainer width="100%" height={600}>
+                    <LineChart data={graphData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="hour"
+                        tick={{ fontSize: 12, dy: 60, dx: -40 }}
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                      />
+                      <YAxis
+                        label={{
+                          value: "النسبة المئوية (%)",
+                          angle: -90,
+                          dx: -20, // move left
+                        }}
+                        tick={{ fontSize: 12, dx: -15 }}
+                        stroke="#6b7280"
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "rgba(255, 255, 255, 0.95)",
+                          border: "2px solid #e5e7eb",
+                          borderRadius: "8px",
+                          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                        }}
+                      />
+                      <Legend content={<CustomLegend />} />
+                      {selectedSensorDetails.map((sensor, sensorIndex) => (
+                        <Line
+                          key={sensor.id}
+                          type="monotone"
+                          dataKey={`sensor_${sensor.id}`}
+                          name={`${sensor.sensor_name} (${sensor.department_name})`}
+                          stroke={getSensorColor(sensorIndex)}
+                          strokeWidth={2.5}
+                          dot={{ r: 4 }}
+                          activeDot={{ r: 6 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
-              </div>
-              <ResponsiveContainer width="100%" height={600}>
-                <LineChart data={graphData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="hour"
-                    tick={{ fontSize: 12, dy: 60, dx: -40 }}
-                    stroke="#6b7280"
-                    angle={-45}
-                    textAnchor="end"
-                    height={100}
-                  />
-                  <YAxis
-                    label={{
-                      value: "النسبة المئوية (%)",
-                      angle: -90,
-                      dx: -20, // move left
-                    }}
-                    tick={{ fontSize: 12, dx: -15 }}
-                    stroke="#6b7280"
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "rgba(255, 255, 255, 0.95)",
-                      border: "2px solid #e5e7eb",
-                      borderRadius: "8px",
-                      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                    }}
-                  />
-                  <Legend content={<CustomLegend />} />
-                  {selectedSensorDetails.map((sensor, sensorIndex) => (
-                    <Line
-                      key={sensor.id}
-                      type="monotone"
-                      dataKey={`sensor_${sensor.id}`}
-                      name={`${sensor.sensor_name} (${sensor.department_name})`}
-                      stroke={getSensorColor(sensorIndex)}
-                      strokeWidth={2.5}
-                      dot={{ r: 4 }}
-                      activeDot={{ r: 6 }}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+              ) : (
+                <div className="mt-8 bg-gradient-to-br from-gray-50 to-white p-12 rounded-xl border-2 border-gray-100 shadow-sm">
+                  <div className="flex flex-col items-center justify-center text-center">
+                    <div className="mb-6 p-4 bg-gray-100 rounded-full">
+                      <BarChart3 className="w-16 h-16 text-gray-400" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-gray-800 mb-3">
+                      لا توجد بيانات متاحة
+                    </h3>
+                    <p className="text-gray-600 max-w-md mb-6">
+                      لا توجد بيانات للعرض في الفترة الزمنية المحددة. يرجى
+                      محاولة اختيار فترة زمنية مختلفة أو أجهزة استشعار أخرى.
+                    </p>
+                    <div className="flex flex-wrap gap-2 justify-center text-sm text-gray-500">
+                      <span className="px-3 py-1 bg-gray-100 rounded-full">
+                        {selectedSensorDetails.length > 0
+                          ? `${selectedSensorDetails.length} جهاز استشعار`
+                          : "لا توجد أجهزة محددة"}
+                      </span>
+                      {startDate && endDate && (
+                        <span className="px-3 py-1 bg-gray-100 rounded-full">
+                          {dateToString(startDate)} - {dateToString(endDate)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
