@@ -1,29 +1,19 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
-// import { BrowserRouter, Route } from "react-router";
-// import { Routes } from "react-router";
-// import Login from "./pages/Login.tsx";
-// import ProtectedRoute from "./pages/ProtectedRoute.tsx";
+import { BrowserRouter, Route, Routes } from "react-router";
 import App from "./App.tsx";
+import SensorComparisonGraph from "./components/SensorComparisonGraph.tsx";
 import { Toaster } from "react-hot-toast";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {/* <BrowserRouter>
+    <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <App />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/" element={<App />} />
+        <Route path="/sensor-comparison" element={<SensorComparisonGraph />} />
       </Routes>
-    </BrowserRouter> */}
-    <App />
+    </BrowserRouter>
     <Toaster position="top-center" />
   </StrictMode>
 );

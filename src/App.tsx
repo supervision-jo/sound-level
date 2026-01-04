@@ -11,12 +11,8 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import LoginForm from "./pages/Login";
-import SensorModal from "./components/SensorModal";
 import ApiReportModal from "./components/ApiReportModal";
-import HeatmapModal from "./components/HeatmapModal";
-import SensorGraphModal from "./components/SensorGraphModal";
-import AlertConfigModal from "./components/AlertConfigModal";
-import { Navigate } from "react-router";
+import { useNavigate } from "react-router";
 
 const SENSOR_DATA_WS_URL = "wss://sound-level.vision-jo.com/ws/sensor-data/";
 const LOGIN_API_URL = "https://sound-level.vision-jo.com/api/auth/login/";
@@ -95,6 +91,7 @@ function App() {
   const [isHeatmapModalOpen, setIsHeatmapModalOpen] = useState(false);
   const [isSensorGraphModalOpen, setIsSensorGraphModalOpen] = useState(false);
   const [isAlertConfigModalOpen, setIsAlertConfigModalOpen] = useState(false);
+  const navigate = useNavigate();
 
   const handleLogin = async (username: string, password: string) => {
     setIsLoading(true);
@@ -409,11 +406,11 @@ function App() {
     setIsSensorModalOpen(true);
   };
 
-  const closeSensorModal = () => {
-    setIsSensorModalOpen(false);
-    setSelectedSensor(null);
-    setSelectedDepartment(null);
-  };
+  // const closeSensorModal = () => {
+  //   setIsSensorModalOpen(false);
+  //   setSelectedSensor(null);
+  //   setSelectedDepartment(null);
+  // };
 
   const openReportsModal = () => {
     setIsReportsModalOpen(true);
@@ -423,29 +420,29 @@ function App() {
     setIsReportsModalOpen(false);
   };
 
-  const openHeatmapModal = () => {
-    setIsHeatmapModalOpen(true);
-  };
+  // const openHeatmapModal = () => {
+  //   setIsHeatmapModalOpen(true);
+  // };
 
-  const closeHeatmapModal = () => {
-    setIsHeatmapModalOpen(false);
-  };
+  // const closeHeatmapModal = () => {
+  //   setIsHeatmapModalOpen(false);
+  // };
 
-  const openSensorGraphModal = () => {
-    setIsSensorGraphModalOpen(true);
-  };
+  // const openSensorGraphModal = () => {
+  //   setIsSensorGraphModalOpen(true);
+  // };
 
-  const closeSensorGraphModal = () => {
-    setIsSensorGraphModalOpen(false);
-  };
+  // const closeSensorGraphModal = () => {
+  //   setIsSensorGraphModalOpen(false);
+  // };
 
-  const openAlertConfigModal = () => {
-    setIsAlertConfigModalOpen(true);
-  };
+  // const openAlertConfigModal = () => {
+  //   setIsAlertConfigModalOpen(true);
+  // };
 
-  const closeAlertConfigModal = () => {
-    setIsAlertConfigModalOpen(false);
-  };
+  // const closeAlertConfigModal = () => {
+  //   setIsAlertConfigModalOpen(false);
+  // };
 
   const getSensorStatusIcon = (sensor: any) => {
     const status = getWifiSignalStatus(sensor);
@@ -843,9 +840,9 @@ function App() {
 
   // console.log(departments, "departments");
 
-  const getSensoresStatus = (sensor: any) => {
-    return getSensorAverage(sensor);
-  };
+  // const getSensoresStatus = (sensor: any) => {
+  //   return getSensorAverage(sensor);
+  // };
 
   const displayFullName = [user?.firstName, user?.lastName]
     .map((part) => (typeof part === "string" ? part.trim() : ""))
@@ -1169,6 +1166,12 @@ function App() {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => navigate("/sensor-comparison")}
+                className="px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                Sensor Comparison
+              </button>
               <button
                 onClick={openReportsModal}
                 className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-1 transition-colors"

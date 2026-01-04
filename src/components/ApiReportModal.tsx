@@ -11,14 +11,26 @@ type ReportId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 const BASE_URL = "https://sound-level.vision-jo.com/api/reports";
 
 const REPORT_CONFIG: { id: ReportId; filename: string }[] = [
-  { id: 1, filename: "Noise_Levels_By_Shift_Per_Sensor.xlsx" },
-  { id: 2, filename: "Hourly_Noise_Levels_By_Sensor.xlsx" },
-  { id: 3, filename: "Hourly_Noise_Levels_By_Department.xlsx" },
-  { id: 4, filename: "Noise_Levels_By_Shift_Per_Department.xlsx" },
-  { id: 5, filename: "Detailed_Sensor_Noise_Report_By_Shift.xlsx" },
-  { id: 6, filename: "Noise_Sensor_Configuration_And_Settings.xlsx" },
-  { id: 7, filename: "Daily_Noise_Levels_By_Sensor.xlsx" },
-  { id: 8, filename: "Weekly_Hourly_Noise_Patterns_By_Sensor.xlsx" },
+  {
+    id: 1,
+    filename: "Hourly_Noise_Above_55dB_By_Sensor_Floor_Department.xlsx",
+  },
+  {
+    id: 2,
+    filename: "Hourly_Noise_By_Thresholds_By_Sensor_Floor_Department.xlsx",
+  },
+  { id: 3, filename: "Hourly_Noise_Level_Exceedance_By_Department.xlsx" },
+  { id: 4, filename: "Noise_Level_Exceedance_By_Department_And_Shift.xlsx" },
+  {
+    id: 5,
+    filename: "Noise_Exceedance_By_Sensor_Floor_Department_Per_Shift",
+  },
+  { id: 6, filename: "Sensor_Configuration_Metadata.xlsx" },
+  { id: 7, filename: "Noise_Exceedance_By_Sensor_Floor_Department_Daily.xlsx" },
+  {
+    id: 8,
+    filename: "Noise_Exceedance_By_Sensor_Floor_Department_By_Day.xlsx.xlsx",
+  },
 ];
 
 const getReportConfig = (id: ReportId) =>
