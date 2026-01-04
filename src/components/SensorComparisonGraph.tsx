@@ -56,13 +56,73 @@ const THRESHOLD_OPTIONS = [
   { key: "percentage_above_75", label: "> 75°C", color: "#7f1d1d" },
 ];
 
+const getYesterdayDate = (): string => {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return yesterday.toISOString().split("T")[0];
+};
+
+interface CustomLegendProps {
+  payload?: Array<{
+    value: string;
+    color: string;
+    type?: string;
+  }>;
+}
+
+const CustomLegend = ({ payload }: CustomLegendProps) => {
+  if (!payload) return null;
+
+  const parseLabel = (label: string) => {
+    const match = label.match(/^(.+?)\s*\((.+?)\)$/);
+    if (match) {
+      return {
+        mainText: match[1].trim(),
+        parenthesesText: match[2].trim(),
+      };
+    }
+    return {
+      mainText: label,
+      parenthesesText: null,
+    };
+  };
+
+  return (
+    <div className="pt-5 flex flex-wrap justify-center gap-2">
+      {payload.map((entry, index) => {
+        const { mainText, parenthesesText } = parseLabel(entry.value);
+        return (
+          <div
+            key={`item-${index}`}
+            className="inline-flex items-center gap-2 px-3 py-2"
+          >
+            <span
+              className="w-6 h-1.5 rounded-full"
+              style={{ backgroundColor: entry.color }}
+            />
+            <span className="text-sm">
+              <span className="font-bold">{mainText}</span>
+              {parenthesesText && (
+                <span className="text-xs font-medium text-gray-600">
+                  {" "}
+                  ({parenthesesText})
+                </span>
+              )}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export default function SensorComparisonGraph() {
   const navigate = useNavigate();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [selectedSensors, setSelectedSensors] = useState<number[]>([]);
-  const [startDate, setStartDate] = useState("2026-01-01");
-  const [endDate, setEndDate] = useState("2026-01-02");
+  const [startDate, setStartDate] = useState(getYesterdayDate());
+  const [endDate, setEndDate] = useState(getYesterdayDate());
   const [selectedThreshold, setSelectedThreshold] = useState<string>(
     "percentage_above_50"
   );
@@ -353,7 +413,7 @@ export default function SensorComparisonGraph() {
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full pr-10 pl-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full pr-10 pl-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 [&::-webkit-calendar-picker-indicator]:hidden"
                   />
                 </div>
               </div>
@@ -368,7 +428,7 @@ export default function SensorComparisonGraph() {
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full pr-10 pl-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full pr-10 pl-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 [&::-webkit-calendar-picker-indicator]:hidden"
                   />
                 </div>
               </div>
@@ -478,12 +538,12 @@ export default function SensorComparisonGraph() {
                   ))}
                 </div>
               </div>
-              <ResponsiveContainer width="100%" height={500}>
+              <ResponsiveContainer width="100%" height={600}>
                 <LineChart data={graphData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis
                     dataKey="hour"
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 12, dy: 60, dx: -40 }}
                     stroke="#6b7280"
                     angle={-45}
                     textAnchor="end"
@@ -493,9 +553,9 @@ export default function SensorComparisonGraph() {
                     label={{
                       value: "النسبة المئوية (%)",
                       angle: -90,
-                      position: "insideRight",
+                      dx: -20, // move left
                     }}
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 12, dx: -15 }}
                     stroke="#6b7280"
                   />
                   <Tooltip
@@ -506,10 +566,7 @@ export default function SensorComparisonGraph() {
                       boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
                     }}
                   />
-                  <Legend
-                    wrapperStyle={{ paddingTop: "20px" }}
-                    iconType="line"
-                  />
+                  <Legend content={<CustomLegend />} />
                   {selectedSensorDetails.map((sensor, sensorIndex) => (
                     <Line
                       key={sensor.id}
