@@ -24,7 +24,10 @@ interface Sensor {
 }
 
 interface HourSummary {
-  hour_start: string;
+  hour_start?: string;
+  period_start?: string;
+  period_end?: string;
+  date?: string;
   percentage_above_35: number;
   percentage_above_40: number;
   percentage_above_45: number;
@@ -137,6 +140,7 @@ export default function SensorComparisonGraph() {
   const [selectedThreshold, setSelectedThreshold] = useState<string>(
     "percentage_above_50"
   );
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("day");
   const [graphData, setGraphData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingSensors, setLoadingSensors] = useState(true);
@@ -147,12 +151,6 @@ export default function SensorComparisonGraph() {
   useEffect(() => {
     fetchSensors();
   }, []);
-
-  useEffect(() => {
-    if (graphData.length > 0 && selectedSensors.length > 0) {
-      fetchGraphData();
-    }
-  }, [selectedThreshold]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -217,15 +215,16 @@ export default function SensorComparisonGraph() {
       console.log("=== FETCHING GRAPH DATA ===");
       console.log("Selected sensor IDs:", sensorIds);
       console.log("Date range:", startDateStr, "to", endDateStr);
+      console.log("Period:", selectedPeriod);
 
-      const url = `https://sound-level.vision-jo.com/api/hour-summaries/graph/?sensor_ids=${sensorIds}&start_date=${startDateStr}&end_date=${endDateStr}`;
+      const url = `https://sound-level.vision-jo.com/api/hour-summaries/graph/?sensor_ids=${sensorIds}&start_date=${startDateStr}&end_date=${endDateStr}&period=${selectedPeriod}`;
       console.log("API URL:", url);
 
       const response = await fetch(url);
       const data: ApiResponse = await response.json();
       console.log("Graph API Response:", data);
 
-      const processedData = processDataForGraph(data);
+      const processedData = processDataForGraph(data, selectedPeriod);
       setGraphData(processedData);
       setHasFetchedData(true);
     } catch (error) {
@@ -236,30 +235,83 @@ export default function SensorComparisonGraph() {
     }
   };
 
-  const processDataForGraph = (data: ApiResponse) => {
-    if (!data.sensors || data.sensors.length === 0) return [];
-
-    const allHours = new Set<string>();
-    data.sensors.forEach((sensor) => {
-      sensor.summaries.forEach((summary) => {
-        allHours.add(summary.hour_start);
-      });
-    });
-
-    const sortedHours = Array.from(allHours).sort();
-
-    return sortedHours.map((hour) => {
-      const dataPoint: any = {
-        hour: new Date(hour).toLocaleString("ar-SA", {
+  const formatDateLabel = (dateString: string, period: string): string => {
+    const date = new Date(dateString);
+    
+    switch (period) {
+      case "hour":
+        return date.toLocaleString("ar-SA", {
           month: "short",
           day: "numeric",
           hour: "2-digit",
-        }),
-        fullDate: hour,
+          minute: "2-digit",
+        });
+      case "day":
+      case "week":
+        return date.toLocaleString("ar-SA", {
+          month: "short",
+          day: "numeric",
+        });
+      case "month":
+        return date.toLocaleString("ar-SA", {
+          month: "short",
+          year: "numeric",
+        });
+      case "year":
+        return date.toLocaleString("ar-SA", {
+          year: "numeric",
+        });
+      default:
+        return date.toLocaleString("ar-SA", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+        });
+    }
+  };
+
+  const processDataForGraph = (data: ApiResponse, period: string) => {
+    if (!data.sensors || data.sensors.length === 0) return [];
+
+    const allTimePoints = new Set<string>();
+    
+    // Collect time points based on period type
+    data.sensors.forEach((sensor) => {
+      sensor.summaries.forEach((summary) => {
+        if (period === "hour") {
+          if (summary.hour_start) {
+            allTimePoints.add(summary.hour_start);
+          }
+        } else {
+          // For non-hour periods, use period_start or date
+          const timePoint = summary.period_start || summary.date;
+          if (timePoint) {
+            allTimePoints.add(timePoint);
+          }
+        }
+      });
+    });
+
+    const sortedTimePoints = Array.from(allTimePoints).sort();
+
+    return sortedTimePoints.map((timePoint) => {
+      const dataPoint: any = {
+        hour: formatDateLabel(timePoint, period),
+        fullDate: timePoint,
       };
 
       data.sensors.forEach((sensor) => {
-        const summary = sensor.summaries.find((s) => s.hour_start === hour);
+        let summary: HourSummary | undefined;
+        
+        if (period === "hour") {
+          summary = sensor.summaries.find((s) => s.hour_start === timePoint);
+        } else {
+          // For non-hour periods, match by period_start or date
+          summary = sensor.summaries.find(
+            (s) => s.period_start === timePoint || s.date === timePoint
+          );
+        }
+        
         if (summary) {
           dataPoint[`sensor_${sensor.sensor_id}`] =
             summary[selectedThreshold as keyof HourSummary];
@@ -398,7 +450,7 @@ export default function SensorComparisonGraph() {
                                 console.log("Sensor object:", sensor);
                                 toggleSensor(sensor.id);
                               }}
-                              className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                              className="w-5 h-5 cursor-pointer text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                             />
                             <div className="flex-1 text-right">
                               <div className="font-semibold text-gray-800">
@@ -418,7 +470,7 @@ export default function SensorComparisonGraph() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   تاريخ البداية
@@ -445,6 +497,23 @@ export default function SensorComparisonGraph() {
                   className="w-full pr-4 pl-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-300"
                   placeholderText="اختر التاريخ"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  الفترة الزمنية
+                </label>
+                <select
+                  value={selectedPeriod}
+                  onChange={(e) => setSelectedPeriod(e.target.value)}
+                  className="w-full pr-4 pl-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-right hover:bg-gray-50 transition-colors"
+                >
+                  <option value="hour">ساعة</option>
+                  <option value="day">يوم</option>
+                  <option value="week">أسبوع</option>
+                  <option value="month">شهر</option>
+                  <option value="year">سنة</option>
+                </select>
               </div>
             </div>
           </div>
@@ -474,7 +543,7 @@ export default function SensorComparisonGraph() {
             </div>
           )}
 
-          <div className="mb-8">
+          <div className="my-4">
             <label className="block text-sm font-semibold text-gray-700 mb-3">
               عتبات درجة الحرارة
             </label>
