@@ -80,17 +80,17 @@ function App() {
   const [departments, setDepartments] = useState<any[]>([]);
 
   const [currentTime, _] = useState(new Date());
-  const [timeFrame, setTimeFrame] = useState<"10m" | "1h" | "6h" | "1d">("1h");
+  const [timeFrame] = useState<"10m" | "1h" | "6h" | "1d">("1h");
   const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(
     new Set()
   );
-  const [selectedSensor, setSelectedSensor] = useState<any>(null);
-  const [selectedDepartment, setSelectedDepartment] = useState<any>(null);
-  const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
+  // const [selectedSensor, setSelectedSensor] = useState<any>(null);
+  // const [selectedDepartment, setSelectedDepartment] = useState<any>(null);
+  // const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
-  const [isHeatmapModalOpen, setIsHeatmapModalOpen] = useState(false);
-  const [isSensorGraphModalOpen, setIsSensorGraphModalOpen] = useState(false);
-  const [isAlertConfigModalOpen, setIsAlertConfigModalOpen] = useState(false);
+  // const [isHeatmapModalOpen, setIsHeatmapModalOpen] = useState(false);
+  // const [isSensorGraphModalOpen, setIsSensorGraphModalOpen] = useState(false);
+  // const [isAlertConfigModalOpen, setIsAlertConfigModalOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (username: string, password: string) => {
@@ -232,7 +232,6 @@ function App() {
       }
     };
 
-    console.log(departments);
 
     const clearHeartbeat = () => {
       if (heartbeatTimer) {
@@ -261,7 +260,6 @@ function App() {
       ws.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          // console.log("WebSocket payload received:", payload);
           handlePayload(payload);
         } catch (error) {
           console.error("Failed to parse websocket payload", error);
@@ -400,11 +398,11 @@ function App() {
     }
   };
 
-  const handleSensorClick = (sensor: any, department: any) => {
-    setSelectedSensor(sensor);
-    setSelectedDepartment(department);
-    setIsSensorModalOpen(true);
-  };
+  // const handleSensorClick = (sensor: any, department: any) => {
+  //   setSelectedSensor(sensor);
+  //   setSelectedDepartment(department);
+  //   setIsSensorModalOpen(true);
+  // };
 
   // const closeSensorModal = () => {
   //   setIsSensorModalOpen(false);
@@ -740,7 +738,7 @@ function App() {
 
     return "green";
   };
-
+  console.log(departments, "departments");
   const dashboardStats = useMemo(() => {
     const summary = {
       totalDepartments: departments.length,
@@ -766,9 +764,7 @@ function App() {
         if (noiseStatus === "red" || noiseStatus === "yellow") {
           summary.criticalSensors += 1;
         }
-
-        const wifiStatus = getWifiSignalStatus(sensor);
-        if (wifiStatus === "offline") {
+        if (noiseStatus === "offline") {
           summary.offlineSensors += 1;
         }
 
@@ -838,7 +834,6 @@ function App() {
     );
   };
 
-  // console.log(departments, "departments");
 
   // const getSensoresStatus = (sensor: any) => {
   //   return getSensorAverage(sensor);
@@ -861,7 +856,6 @@ function App() {
 
   //     const average = total / sensor.records.length;
 
-  //     console.log(`Sensor ${sensor.name} avg: ${average}`);
 
   //     // getSensoresStatus(sensor) >= sensor?.yellow &&
   //     // getSensoresStatus(sensor) < sensor?.red
@@ -870,7 +864,6 @@ function App() {
   //     //   ? "critical"
   //     //   : "safe";
 
-  //     console.log("average average", average);
 
   //     if (average >= yellow && average <= red) return "warning";
   //     if (average >= red) return "critical";
@@ -904,7 +897,6 @@ function App() {
   //   //   noiseLevel: getNoiseLevel(house),
   //   // }));
 
-  //   // console.log("departmentStatus", getNoiseLevel(department, red, yellow));
   //   return {
   //     name: department.name,
   //     noiseLevel: getNoiseLevel(department, red, yellow),
@@ -1167,6 +1159,12 @@ function App() {
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
               <button
+                onClick={() => navigate("/department-comparison")}
+                className="px-4 py-2 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                Department Comparison
+              </button>
+              <button
                 onClick={() => navigate("/sensor-comparison")}
                 className="px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-sm font-medium transition-colors"
               >
@@ -1365,14 +1363,14 @@ function App() {
                           </h4>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {dept.sensors.map((sensor: any) => {
-                              const wifiStatus = getWifiSignalStatus(sensor);
+                              // const wifiStatus = getWifiSignalStatus(sensor);
                               const noiseStatus = getSensorNoiseStatus(sensor);
                               return (
                                 <div
                                   key={sensor.id}
-                                  onClick={() =>
-                                    handleSensorClick(sensor, dept)
-                                  }
+                                  // onClick={() =>
+                                  //   handleSensorClick(sensor, dept)
+                                  // }
                                   className={`p-3 rounded-lg border ${getStatusColor(
                                     noiseStatus
                                   )} hover:shadow-md transition-all duration-200`}

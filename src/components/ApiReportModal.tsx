@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { FileSpreadsheet } from "lucide-react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 interface ApiReportModalProps {
   isOpen: boolean;
@@ -10,26 +12,59 @@ type ReportId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 const BASE_URL = "https://sound-level.vision-jo.com/api/reports";
 
-const REPORT_CONFIG: { id: ReportId; filename: string }[] = [
+const REPORT_CONFIG: {
+  id: ReportId;
+  filename: string;
+  nameAr: string;
+  nameEn: string;
+}[] = [
   {
     id: 1,
     filename: "Hourly_Noise_Above_55dB_By_Sensor_Floor_Department.xlsx",
+    nameAr: "الضوضاء الساعية فوق 55 ديسيبل حسب المستشعر والطابق والقسم",
+    nameEn: "Hourly Noise Above 55dB By Sensor Floor Department",
   },
   {
     id: 2,
     filename: "Hourly_Noise_By_Thresholds_By_Sensor_Floor_Department.xlsx",
+    nameAr: "الضوضاء الساعية حسب العتبات والمستشعر والطابق والقسم",
+    nameEn: "Hourly Noise By Thresholds By Sensor Floor Department",
   },
-  { id: 3, filename: "Hourly_Noise_Level_Exceedance_By_Department.xlsx" },
-  { id: 4, filename: "Noise_Level_Exceedance_By_Department_And_Shift.xlsx" },
+  {
+    id: 3,
+    filename: "Hourly_Noise_Level_Exceedance_By_Department.xlsx",
+    nameAr: "تجاوز مستوى الضوضاء الساعي حسب القسم",
+    nameEn: "Hourly Noise Level Exceedance By Department",
+  },
+  {
+    id: 4,
+    filename: "Noise_Level_Exceedance_By_Department_And_Shift.xlsx",
+    nameAr: "تجاوز مستوى الضوضاء حسب القسم والوردية",
+    nameEn: "Noise Level Exceedance By Department And Shift",
+  },
   {
     id: 5,
     filename: "Noise_Exceedance_By_Sensor_Floor_Department_Per_Shift",
+    nameAr: "تجاوز الضوضاء حسب المستشعر والطابق والقسم لكل وردية",
+    nameEn: "Noise Exceedance By Sensor Floor Department Per Shift",
   },
-  { id: 6, filename: "Sensor_Configuration_Metadata.xlsx" },
-  { id: 7, filename: "Noise_Exceedance_By_Sensor_Floor_Department_Daily.xlsx" },
+  {
+    id: 6,
+    filename: "Sensor_Configuration_Metadata.xlsx",
+    nameAr: "بيانات إعدادات المستشعرات",
+    nameEn: "Sensor Configuration Metadata",
+  },
+  {
+    id: 7,
+    filename: "Noise_Exceedance_By_Sensor_Floor_Department_Daily.xlsx",
+    nameAr: "تجاوز الضوضاء حسب المستشعر والطابق والقسم يومياً",
+    nameEn: "Noise Exceedance By Sensor Floor Department Daily",
+  },
   {
     id: 8,
     filename: "Noise_Exceedance_By_Sensor_Floor_Department_By_Day.xlsx.xlsx",
+    nameAr: "تجاوز الضوضاء حسب المستشعر والطابق والقسم حسب اليوم",
+    nameEn: "Noise Exceedance By Sensor Floor Department By Day",
   },
 ];
 
@@ -37,12 +72,16 @@ const getReportConfig = (id: ReportId) =>
   REPORT_CONFIG.find((r) => r.id === id) ?? {
     id,
     filename: `Report_${id}.xlsx`,
+    nameAr: `تقرير ${id}`,
+    nameEn: `Report ${id}`,
   };
 
-const getReportLabel = (id: ReportId) => {
-  const { filename } = getReportConfig(id);
-  const base = filename.replace(/\.xlsx$/i, "");
-  return base.replace(/_/g, " ");
+const dateToString = (date: Date | null): string => {
+  if (!date) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 const buildFilenameWithDates = (
@@ -68,11 +107,9 @@ const buildFilenameWithDates = (
 };
 
 const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
-  const today = new Date().toISOString().split("T")[0];
-
   const [reportId, setReportId] = useState<ReportId>(1);
-  const [fromDate, setFromDate] = useState<string>("");
-  const [toDate, setToDate] = useState<string>("");
+  const [fromDate, setFromDate] = useState<Date | null>(null);
+  const [toDate, setToDate] = useState<Date | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -85,17 +122,7 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
     setError(null);
     setSuccess(null);
 
-    // Basic date validation against today's date and range consistency
-    if (fromDate && fromDate > today) {
-      setError("Start date cannot be in the future.");
-      return;
-    }
-
-    if (toDate && toDate > today) {
-      setError("End date cannot be in the future.");
-      return;
-    }
-
+    // Basic date validation for range consistency
     if (fromDate && toDate && fromDate > toDate) {
       setError("Start date cannot be after end date.");
       return;
@@ -108,11 +135,14 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
     }
 
     const params = new URLSearchParams();
-    if (fromDate) {
-      params.append("start_date", fromDate);
+    const fromDateStr = dateToString(fromDate);
+    const toDateStr = dateToString(toDate);
+    
+    if (fromDateStr) {
+      params.append("start_date", fromDateStr);
     }
-    if (toDate) {
-      params.append("end_date", toDate);
+    if (toDateStr) {
+      params.append("end_date", toDateStr);
     }
 
     const queryString = params.toString();
@@ -148,8 +178,8 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
       const baseFilename = getReportConfig(reportId).filename;
       const filename = buildFilenameWithDates(
         baseFilename,
-        fromDate || undefined,
-        toDate || undefined
+        fromDateStr || undefined,
+        toDateStr || undefined
       );
 
       const urlObject = window.URL.createObjectURL(blob);
@@ -161,7 +191,9 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
       link.remove();
       window.URL.revokeObjectURL(urlObject);
 
-      setSuccess(`"${getReportLabel(reportId)}" downloaded as Excel.`);
+      setSuccess(
+        `"${getReportConfig(reportId).nameEn}" downloaded as Excel.`
+      );
     } catch (err) {
       console.error("Error generating report:", err);
       setError(
@@ -182,7 +214,7 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 py-6 sm:px-6">
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-4xl">
         <div className="rounded-2xl bg-white shadow-2xl border border-blue-100/60 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-50/80 via-white to-blue-50/60">
@@ -218,14 +250,30 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
                 onChange={(e) =>
                   setReportId(Number(e.target.value) as ReportId)
                 }
-                className="block w-full rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="block w-full rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                dir="rtl"
               >
                 {REPORT_CONFIG.map((config) => (
                   <option key={config.id} value={config.id}>
-                    {getReportLabel(config.id)}
+                    {config.nameAr} | {config.nameEn}
                   </option>
                 ))}
               </select>
+              {/* <div className="mt-2 p-3 rounded-lg bg-blue-50/50 border border-blue-100">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 text-right">
+                    <p className="text-sm font-semibold text-slate-800">
+                      {getReportConfig(reportId).nameAr}
+                    </p>
+                  </div>
+                  <div className="h-6 w-px bg-slate-300" />
+                  <div className="flex-1 text-left">
+                    <p className="text-sm font-semibold text-slate-800">
+                      {getReportConfig(reportId).nameEn}
+                    </p>
+                  </div>
+                </div>
+              </div> */}
             </div>
 
             {/* Date range */}
@@ -243,22 +291,26 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
                   <label className="block text-xs text-slate-600">
                     From date <span className="text-slate-400">(optional)</span>
                   </label>
-                  <input
-                    type="date"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
+                  <DatePicker
+                    selected={fromDate}
+                    onChange={(date: Date | null) => setFromDate(date)}
+                    dateFormat="dd/MM/yyyy"
+                    wrapperClassName="w-full"
                     className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    placeholderText="Select start date"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs text-slate-600">
                     To date <span className="text-slate-400">(optional)</span>
                   </label>
-                  <input
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
+                  <DatePicker
+                    selected={toDate}
+                    onChange={(date: Date | null) => setToDate(date)}
+                    dateFormat="dd/MM/yyyy"
+                    wrapperClassName="w-full"
                     className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    placeholderText="Select end date"
                   />
                 </div>
               </div>

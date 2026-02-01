@@ -4,6 +4,7 @@ import "./index.css";
 import { BrowserRouter, Route, Routes } from "react-router";
 import App from "./App.tsx";
 import SensorComparisonGraph from "./components/SensorComparisonGraph.tsx";
+import DepartmentComparisonGraph from "./components/DepartmentComparisonGraph.tsx";
 import { Toaster } from "react-hot-toast";
 
 createRoot(document.getElementById("root")!).render(
@@ -12,6 +13,7 @@ createRoot(document.getElementById("root")!).render(
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/sensor-comparison" element={<SensorComparisonGraph />} />
+        <Route path="/department-comparison" element={<DepartmentComparisonGraph />} />
       </Routes>
     </BrowserRouter>
     <Toaster position="top-center" />
