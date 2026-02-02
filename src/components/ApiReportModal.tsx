@@ -45,8 +45,8 @@ const REPORT_CONFIG: {
   {
     id: 5,
     filename: "Percentage_of_Noise_Exceedance_By_Sensor_Per_Shift.xlsx",
-    nameAr: "نسبة تجاوز مستويات الضوضاء حسب المستشعر لكل وردية",
-    nameEn: "Percentage of Noise Exceedance By Sensor Per Shift",
+    nameAr: "نسبة الضوضاء التي تتجاوز 55 ديسيبل حسب المستشعر والوردية",
+    nameEn: "Percentage of Noise Above 55dB By Sensor And Shift",
   },
   {
     id: 6,
