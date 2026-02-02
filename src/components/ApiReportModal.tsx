@@ -21,25 +21,25 @@ const REPORT_CONFIG: {
   {
     id: 1,
     filename: "Hourly_Noise_Above_55dB_By_Sensor_Floor_Department.xlsx",
-    nameAr: "الضوضاء الساعية فوق 55 ديسيبل حسب المستشعر والطابق والقسم",
+    nameAr: "الضوضاء الساعية التي تتجاوز 55 ديسيبل حسب المستشعر والطابق والقسم",
     nameEn: "Hourly Noise Above 55dB By Sensor Floor Department",
   },
   {
     id: 2,
     filename: "Hourly_Noise_By_Thresholds_By_Sensor_Floor_Department.xlsx",
-    nameAr: "الضوضاء الساعية حسب العتبات والمستشعر والطابق والقسم",
+    nameAr: "الضوضاء الساعية حسب العتبات وفقًا للمستشعر والطابق والقسم",
     nameEn: "Hourly Noise By Thresholds By Sensor Floor Department",
   },
   {
     id: 3,
     filename: "Hourly_Noise_Level_Exceedance_By_Department.xlsx",
-    nameAr: "تجاوز مستوى الضوضاء الساعي حسب القسم",
+    nameAr: "تجاوز مستويات الضوضاء الساعية حسب القسم",
     nameEn: "Hourly Noise Level Exceedance By Department",
   },
   {
     id: 4,
     filename: "Noise_Level_Exceedance_By_Department_And_Shift.xlsx",
-    nameAr: "تجاوز مستوى الضوضاء حسب القسم والوردية",
+    nameAr: "تجاوز مستويات الضوضاء حسب القسم والوردية",
     nameEn: "Noise Level Exceedance By Department And Shift",
   },
   {
@@ -51,13 +51,13 @@ const REPORT_CONFIG: {
   {
     id: 6,
     filename: "Sensor_Configuration_Metadata.xlsx",
-    nameAr: "بيانات إعدادات المستشعرات",
+    nameAr: "البيانات الوصفية لإعدادات المستشعرات",
     nameEn: "Sensor Configuration Metadata",
   },
   {
     id: 7,
     filename: "Noise_Exceedance_By_Sensor_Floor_Department_Daily.xlsx",
-    nameAr: "تجاوز الضوضاء حسب المستشعر والطابق والقسم يومياً",
+    nameAr: "تجاوز الضوضاء اليومي حسب المستشعر والطابق والقسم",
     nameEn: "Noise Exceedance By Sensor Floor Department Daily",
   },
   {
