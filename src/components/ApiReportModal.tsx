@@ -26,7 +26,7 @@ const REPORT_CONFIG: {
   },
   {
     id: 2,
-    filename: "Percentage_of_Noise_By_Thresholds_By_Sensor.xlsx",
+    filename: "All_Percentages_of_Noise_By_Sensor.xlsx",
     nameAr: "جميع نسب الضوضاء حسب المستشعر",
     nameEn: "All Percentages of Noise By Sensor",
   },
@@ -44,7 +44,7 @@ const REPORT_CONFIG: {
   },
   {
     id: 5,
-    filename: "Percentage_of_Noise_Exceedance_By_Sensor_Per_Shift.xlsx",
+    filename: "Percentage_of_Noise_Above_55dB_By_Sensor_And_Shift.xlsx",
     nameAr: "نسبة الضوضاء التي تتجاوز 55 ديسيبل حسب المستشعر والوردية",
     nameEn: "Percentage of Noise Above 55dB By Sensor And Shift",
   },
