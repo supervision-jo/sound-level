@@ -20,21 +20,21 @@ const REPORT_CONFIG: {
 }[] = [
   {
     id: 1,
-    filename: "Hourly_Noise_Above_55dB_By_Sensor_Floor_Department.xlsx",
-    nameAr: "الضوضاء على مستوى الساعة التي تتجاوز 55 ديسيبل حسب المستشعر",
-    nameEn: "Hourly Noise Above 55dB By Sensor",
+    filename: "Hourly_Noise_Above_55dB_By_Sensor.xlsx",
+    nameAr: "نسبة الضوضاء التي تتجاوز 55 ديسيبل حسب القسم والوردية",
+    nameEn: "Percentage of Noise Above 55dB By Department And Shift",
   },
   {
     id: 2,
-    filename: "Hourly_Noise_By_Thresholds_By_Sensor_Floor_Department.xlsx",
-    nameAr: "الضوضاء على مستوى الساعة لجميع العتبات وفقًا للمستشعر",
-    nameEn: "Hourly Noise By All Thresholds By Sensor",
+    filename: "Hourly_Noise_By_Thresholds_By_Sensor.xlsx",
+    nameAr: "إعدادات المستشعرات",
+    nameEn: "Sensors Settings",
   },
   {
     id: 3,
-    filename: "Hourly_Noise_Level_Exceedance_By_Department.xlsx",
-    nameAr: "تجاوز مستويات الضوضاء الساعية حسب القسم",
-    nameEn: "Hourly Noise Level Exceedance By Department",
+    filename: "Hourly_Noise_Above_55dB_By_Department.xlsx",
+    nameAr: "الضوضاء على مستوى الساعة التي تتجاوز 55 ديسيبل حسب القسم",
+    nameEn: "Hourly Noise Above 55dB By Department",
   },
   {
     id: 4,
