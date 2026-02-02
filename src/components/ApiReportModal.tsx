@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { FileSpreadsheet } from "lucide-react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import Select, { components, OptionProps, SingleValueProps } from "react-select";
 
 interface ApiReportModalProps {
   isOpen: boolean;
@@ -76,6 +77,47 @@ const getReportConfig = (id: ReportId) =>
     nameEn: `Report ${id}`,
   };
 
+interface SelectOption {
+  value: ReportId;
+  label: string;
+  nameEn: string;
+  nameAr: string;
+}
+
+const CustomOption = (props: OptionProps<SelectOption>) => {
+  const { data } = props;
+  return (
+    <components.Option {...props}>
+      <div className="flex items-center w-full">
+        <span className="text-left flex-1" dir="ltr">
+          {data.nameEn}
+        </span>
+        <span className="px-2 flex-shrink-0 text-slate-400">|</span>
+        <span className="text-right flex-1" dir="rtl">
+          {data.nameAr}
+        </span>
+      </div>
+    </components.Option>
+  );
+};
+
+const CustomSingleValue = (props: SingleValueProps<SelectOption>) => {
+  const { data } = props;
+  return (
+    <components.SingleValue {...props}>
+      <div className="flex items-center w-full">
+        <span className="text-left flex-1" dir="ltr">
+          {data.nameEn}
+        </span>
+        <span className="px-2 flex-shrink-0 text-slate-400">|</span>
+        <span className="text-right flex-1" dir="rtl">
+          {data.nameAr}
+        </span>
+      </div>
+    </components.SingleValue>
+  );
+};
+
 const dateToString = (date: Date | null): string => {
   if (!date) return "";
   const year = date.getFullYear();
@@ -113,6 +155,21 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Transform REPORT_CONFIG to react-select format
+  const selectOptions = useMemo<SelectOption[]>(() => {
+    return REPORT_CONFIG.map((config) => ({
+      value: config.id,
+      label: `${config.nameEn} | ${config.nameAr}`, // Fallback label
+      nameEn: config.nameEn,
+      nameAr: config.nameAr,
+    }));
+  }, []);
+
+  // Get current selected option
+  const selectedOption = useMemo(() => {
+    return selectOptions.find((option) => option.value === reportId) || selectOptions[0];
+  }, [reportId, selectOptions]);
 
   if (!isOpen) {
     return null;
@@ -245,20 +302,64 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
               <label className="block text-xs sm:text-sm font-medium text-slate-700">
                 Report template
               </label>
-              <select
-                value={reportId}
-                onChange={(e) =>
-                  setReportId(Number(e.target.value) as ReportId)
-                }
-                className="block w-full rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                dir="rtl"
-              >
-                {REPORT_CONFIG.map((config) => (
-                  <option key={config.id} value={config.id}>
-                    {config.nameAr} | {config.nameEn}
-                  </option>
-                ))}
-              </select>
+              <Select<SelectOption>
+                value={selectedOption}
+                onChange={(option) => {
+                  if (option) {
+                    setReportId(option.value);
+                  }
+                }}
+                options={selectOptions}
+                components={{
+                  Option: CustomOption,
+                  SingleValue: CustomSingleValue,
+                }}
+                isSearchable={false}
+                styles={{
+                  control: (base, state) => ({
+                    ...base,
+                    borderColor: state.isFocused ? "#3b82f6" : "#e2e8f0",
+                    boxShadow: state.isFocused
+                      ? "0 0 0 2px rgba(59, 130, 246, 0.1)"
+                      : base.boxShadow,
+                    backgroundColor: "rgb(248 250 252 / 0.6)",
+                    borderRadius: "0.5rem",
+                    padding: "0.25rem 0.5rem",
+                    fontSize: "0.875rem",
+                    minHeight: "42px",
+                    "&:hover": {
+                      borderColor: state.isFocused ? "#3b82f6" : "#cbd5e1",
+                    },
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    borderRadius: "0.5rem",
+                    border: "1px solid #e2e8f0",
+                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                  }),
+                  option: (base, state) => ({
+                    ...base,
+                    backgroundColor: state.isSelected
+                      ? "#3b82f6"
+                      : state.isFocused
+                      ? "#f1f5f9"
+                      : "white",
+                    color: state.isSelected ? "white" : "#1e293b",
+                    padding: "0.5rem 0.75rem",
+                    fontSize: "0.875rem",
+                    "&:active": {
+                      backgroundColor: state.isSelected ? "#3b82f6" : "#e2e8f0",
+                    },
+                  }),
+                  singleValue: (base) => ({
+                    ...base,
+                    color: "#1e293b",
+                    fontSize: "0.875rem",
+                  }),
+                }}
+                className="react-select-container"
+                classNamePrefix="react-select"
+              />
               {/* <div className="mt-2 p-3 rounded-lg bg-blue-50/50 border border-blue-100">
                 <div className="flex items-start gap-2">
                   <div className="flex-1 text-right">
