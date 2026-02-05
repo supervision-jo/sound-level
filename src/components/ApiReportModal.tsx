@@ -271,8 +271,8 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 py-6 sm:px-6">
-      <div className="w-full max-w-4xl">
-        <div className="rounded-2xl bg-white shadow-2xl border border-blue-100/60 overflow-hidden">
+      <div className="w-full max-w-4xl h-[70vh]">
+        <div className="h-full flex flex-col rounded-2xl bg-white shadow-2xl border border-blue-100/60 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-50/80 via-white to-blue-50/60">
             <div>
@@ -296,7 +296,7 @@ const ApiReportModal: React.FC<ApiReportModalProps> = ({ isOpen, onClose }) => {
           </div>
 
           {/* Body */}
-          <div className="px-5 sm:px-6 py-5 space-y-4 sm:space-y-5">
+          <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-4 sm:space-y-5">
             {/* Report selector */}
             <div className="space-y-1.5">
               <label className="block text-xs sm:text-sm font-medium text-slate-700">
